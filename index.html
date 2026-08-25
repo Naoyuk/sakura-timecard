@@ -1,0 +1,204 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Timecard | Sakura Mart</title>
+    <meta name="theme-color" content="#0059a8">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-title" content="Sakura Mart">
+    <link rel="manifest" href="manifest.webmanifest">
+    <link rel="icon" href="icon.svg" type="image/svg+xml">
+    <link rel="stylesheet" href="styles.css">
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="topbar">
+        <div>
+          <h1>Sakura Mart</h1>
+          <p id="todayLabel"></p>
+        </div>
+        <nav class="tabs" aria-label="画面切り替え">
+          <button class="tab active" data-view="staffView">Staff</button>
+          <button class="tab" data-view="adminView">管理者</button>
+        </nav>
+      </header>
+
+      <main>
+        <section id="staffView" class="view active">
+          <div class="panel tablet-panel">
+            <div class="panel-heading">
+              <h2>Sign In</h2>
+              <div id="clock" class="clock"></div>
+            </div>
+
+            <form id="staffCodeForm" class="code-form">
+              <label class="field">
+                <span>Staff Code</span>
+                <input id="staffCodeInput" required inputmode="numeric" pattern="[0-9]{5}" maxlength="5" autocomplete="off">
+              </label>
+              <button type="submit">Continue</button>
+            </form>
+            <p id="staffCodeError" class="error hidden">Staff code not found.</p>
+
+            <div id="activePunch" class="status-box hidden"></div>
+            <div id="shiftChoices" class="shift-grid"></div>
+
+            <div class="actions">
+              <button id="clockOutBtn" class="danger hidden">Sign Out</button>
+            </div>
+          </div>
+
+          <div class="panel">
+            <h2>Today's Shifts</h2>
+            <div id="todayShifts" class="list"></div>
+          </div>
+        </section>
+
+        <section id="adminView" class="view">
+          <div class="admin-grid">
+            <div class="panel">
+              <h2>シフト作成</h2>
+              <div class="week-switcher">
+                <button id="prevWeekBtn" type="button" class="ghost" aria-label="前の週">‹</button>
+                <div>
+                  <span>週</span>
+                  <strong id="shiftWeekLabel"></strong>
+                  <input id="shiftWeekStart" required type="hidden">
+                </div>
+                <button id="nextWeekBtn" type="button" class="ghost" aria-label="次の週">›</button>
+              </div>
+              <div class="panel-actions">
+                <button id="openShiftModalBtn" type="button">シフト追加</button>
+              </div>
+              <div id="allShifts" class="list"></div>
+            </div>
+          </div>
+
+          <div class="panel">
+            <div class="panel-heading">
+              <h2>給与計算・保存</h2>
+              <form id="payrollForm" class="payroll-controls">
+                <input id="payStart" type="date" required>
+                <span>から</span>
+                <input id="payEnd" type="date" required>
+                <select id="payStaff" aria-label="対象スタッフ"></select>
+                <button type="submit">計算</button>
+                <button type="button" id="savePayrollBtn" class="secondary">保存</button>
+              </form>
+            </div>
+            <div id="payrollResult" class="payroll"></div>
+          </div>
+
+          <div class="panel">
+            <h2>スタッフ管理</h2>
+            <div class="panel-actions">
+              <button id="openStaffModalBtn" type="button">スタッフ追加</button>
+            </div>
+            <div id="staffList" class="list"></div>
+          </div>
+
+          <div class="panel">
+            <h2>完全バックアップ</h2>
+            <div class="backup-actions">
+              <button id="backupJsonBtn" type="button" class="secondary">バックアップ保存</button>
+              <button id="restoreJsonBtn" type="button" class="ghost">バックアップ復元</button>
+              <input id="restoreJsonInput" class="hidden" type="file" accept="application/json,.json">
+            </div>
+            <p class="note">スタッフ、シフト、打刻、備考、パスコードをまとめて保存・復元します。</p>
+          </div>
+
+          <div class="panel">
+            <h2>管理パスコード</h2>
+            <form id="passcodeForm" class="passcode-form">
+              <label class="field">
+                <span>新しいパスコード</span>
+                <input id="newPasscode" required type="password" inputmode="numeric" autocomplete="new-password">
+              </label>
+              <button type="submit">変更</button>
+            </form>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <div id="passcodeDialog" class="dialog hidden" role="dialog" aria-modal="true" aria-labelledby="passcodeTitle">
+      <form id="adminUnlockForm" class="dialog-panel">
+        <h2 id="passcodeTitle">管理者パスコード</h2>
+        <label class="field">
+          <span>パスコード</span>
+          <input id="adminPasscodeInput" required type="password" inputmode="numeric" autocomplete="current-password">
+        </label>
+        <p id="passcodeError" class="error hidden">パスコードが違います。</p>
+        <div class="dialog-actions">
+          <button type="button" id="passcodeCancelBtn" class="ghost">キャンセル</button>
+          <button type="submit">開く</button>
+        </div>
+      </form>
+    </div>
+
+    <div id="shiftDialog" class="dialog hidden" role="dialog" aria-modal="true" aria-labelledby="shiftDialogTitle">
+      <form id="shiftForm" class="dialog-panel">
+        <h2 id="shiftDialogTitle">シフト追加</h2>
+        <input id="shiftEditId" type="hidden">
+        <label class="field">
+          <span>曜日</span>
+          <select id="shiftDate"></select>
+        </label>
+        <label class="field">
+          <span>スタッフ</span>
+          <select id="shiftStaff"></select>
+        </label>
+        <label class="field">
+          <span>開始</span>
+          <input id="shiftStart" required type="time" step="900" value="09:00">
+        </label>
+        <label class="field">
+          <span>終了</span>
+          <input id="shiftEnd" required type="time" step="900" value="17:00">
+        </label>
+        <div class="dialog-actions">
+          <button type="button" id="shiftCancelBtn" class="ghost">キャンセル</button>
+          <button id="shiftSubmitBtn" type="submit">追加</button>
+        </div>
+      </form>
+    </div>
+
+    <div id="staffDialog" class="dialog hidden" role="dialog" aria-modal="true" aria-labelledby="staffDialogTitle">
+      <form id="staffForm" class="dialog-panel">
+        <h2 id="staffDialogTitle">スタッフ追加</h2>
+        <input id="staffEditId" type="hidden">
+        <label class="field">
+          <span>名前</span>
+          <input id="staffName" required autocomplete="off">
+        </label>
+        <label class="field">
+          <span>時給</span>
+          <input id="staffWage" required type="number" min="0" step="0.01" value="17.40">
+        </label>
+        <label class="field">
+          <span>スタッフコード</span>
+          <input id="staffCode" required inputmode="numeric" pattern="[0-9]{5}" maxlength="5" autocomplete="off">
+        </label>
+        <div class="dialog-actions">
+          <button id="staffCancelBtn" class="ghost" type="button">キャンセル</button>
+          <button id="staffSubmitBtn" type="submit">追加</button>
+        </div>
+      </form>
+    </div>
+
+    <div id="saveDialog" class="dialog hidden" role="dialog" aria-modal="true" aria-labelledby="saveDialogTitle">
+      <div class="dialog-panel">
+        <h2 id="saveDialogTitle">保存形式</h2>
+        <div class="dialog-actions">
+          <button type="button" id="saveCancelBtn" class="ghost">キャンセル</button>
+          <button type="button" id="sheetExportBtn" class="secondary">スプレッドシート</button>
+          <button type="button" id="pdfExportBtn">PDF</button>
+        </div>
+      </div>
+    </div>
+
+    <script src="app.js"></script>
+  </body>
+</html>
