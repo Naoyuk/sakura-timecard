@@ -134,8 +134,26 @@ function openPunchFor(staffId) {
   return state.punches.find((punch) => punch.staffId === staffId && !punch.endAt);
 }
 
-function shiftPunch(shiftId) {
-  return state.punches.find((punch) => punch.shiftId === shiftId);
+function shiftPunch(shiftOrId) {
+  const shift = typeof shiftOrId === "string"
+    ? state.shifts.find((item) => item.id === shiftOrId)
+    : shiftOrId;
+  if (!shift) return undefined;
+
+  const exact = state.punches.find((punch) => punch.shiftId === shift.id);
+  if (exact) return exact;
+
+  // Older device data may not have stored shiftId. Match that data without
+  // changing the saved record, so existing punches remain recoverable.
+  return state.punches.find((punch) => {
+    const scheduledStaffId = punch.scheduledStaffId || punch.staffId;
+    if (punch.shiftId || scheduledStaffId !== shift.staffId || !punch.startAt) return false;
+    const started = new Date(punch.startAt);
+    if (Number.isNaN(started.getTime()) || localDateKey(started) !== shift.date) return false;
+    const start = dateToMinutes(started);
+    const end = punch.endAt ? dateToMinutes(new Date(punch.endAt)) : start + 15;
+    return end > shift.start && start < shift.end;
+  });
 }
 
 function todaysShifts() {
@@ -210,7 +228,7 @@ function openShiftDialog(shiftId = "") {
     const shift = state.shifts.find((item) => item.id === shiftId);
     if (!shift) return;
     $("#shiftDialogTitle").textContent = "シフト変更";
-    $("#shiftSubmitBtn").textContent = "保存";
+    $("#shiftSubmitBtn").textContent = "Save";
     $("#shiftEditId").value = shift.id;
     $("#shiftDate").value = shift.date;
     $("#shiftStaff").value = shift.staffId;
@@ -243,13 +261,29 @@ function closeStaffDialog() {
   $("#staffDialog").classList.add("hidden");
 }
 
+function openStaffCodeDialog(staffId) {
+  const person = state.staff.find((item) => item.id === staffId);
+  if (!person) return;
+  $("#largeStaffName").textContent = person.name;
+  $("#largeStaffCode").textContent = person.code;
+  $("#staffCodeDialog").classList.remove("hidden");
+}
+
+function closeStaffCodeDialog() {
+  $("#staffCodeDialog").classList.add("hidden");
+}
+
 function openPunchDialog(punchId) {
   const punch = state.punches.find((item) => item.id === punchId);
   if (!punch) return;
+  const start = new Date(punch.startAt);
+  const end = punch.endAt ? new Date(punch.endAt) : null;
   $("#punchEditId").value = punch.id;
   $("#punchStaffName").value = staffName(punch.staffId);
-  $("#punchStartAt").value = dateTimeInputValue(new Date(punch.startAt));
-  $("#punchEndAt").value = punch.endAt ? dateTimeInputValue(new Date(punch.endAt)) : "";
+  $("#punchStartDate").value = localDateKey(start);
+  $("#punchStartTime").value = timeLabel(start);
+  $("#punchEndDate").value = end ? localDateKey(end) : "";
+  $("#punchEndTime").value = end ? timeLabel(end) : "";
   $("#punchDialog").classList.remove("hidden");
 }
 
@@ -289,6 +323,21 @@ function renderStaffOptions() {
   renderWeekLabel();
 }
 
+function populateTimeSelects() {
+  document.querySelectorAll(".time-select").forEach((select) => {
+    const current = select.value;
+    const optional = !select.required;
+    const options = [];
+    if (optional) options.push(`<option value="">未入力</option>`);
+    for (let minutes = 0; minutes < 24 * 60; minutes += 15) {
+      const value = minutesToTime(minutes);
+      options.push(`<option value="${value}">${value}</option>`);
+    }
+    select.innerHTML = options.join("");
+    if (current) select.value = current;
+  });
+}
+
 function renderStaffView() {
   const staffId = currentStaffId();
   const person = state.staff.find((item) => item.id === staffId);
@@ -325,8 +374,8 @@ function renderStaffView() {
 
 function signinChoices(staffId) {
   const today = todaysShifts();
-  const own = today.filter((shift) => shift.staffId === staffId && !shiftPunch(shift.id));
-  const swaps = today.filter((shift) => shift.staffId !== staffId && !shiftPunch(shift.id));
+  const own = today.filter((shift) => shift.staffId === staffId && !shiftPunch(shift));
+  const swaps = today.filter((shift) => shift.staffId !== staffId && !shiftPunch(shift));
   const cards = [];
 
   own.forEach((shift) => cards.push(renderSigninCard(shift, false)));
@@ -360,7 +409,7 @@ function renderSigninCard(shift, isSwap) {
 }
 
 function renderShiftRow(shift) {
-  const punch = shiftPunch(shift.id);
+  const punch = shiftPunch(shift);
   const locale = activeViewId() === "staffView" ? "en" : "ja";
   const actual = shiftCoverageLabel(shift, punch, locale);
   const bounds = timelineBounds([shift]);
@@ -446,7 +495,7 @@ function renderWeekTableRow(date) {
 }
 
 function renderCompactShift(shift) {
-  const punch = shiftPunch(shift.id);
+  const punch = shiftPunch(shift);
   const display = displayShiftTimes(shift, punch);
   return `
     <div class="compact-shift">
@@ -486,7 +535,7 @@ function timelineDateLabel(date, locale) {
 function renderTimelineShift(shift, bounds, locale = "ja") {
   if (locale === "en") return renderStaffTimelineShift(shift, bounds);
 
-  const punch = shiftPunch(shift.id);
+  const punch = shiftPunch(shift);
   const actual = shiftCoverageLabel(shift, punch, locale);
   const display = displayShiftTimes(shift, punch);
   return `
@@ -506,7 +555,7 @@ function renderTimelineShift(shift, bounds, locale = "ja") {
 }
 
 function renderStaffTimelineShift(shift, bounds) {
-  const punch = shiftPunch(shift.id);
+  const punch = shiftPunch(shift);
   const actual = shiftCoverageLabel(shift, punch, "en");
   const actualTimes = punch ? actualShiftTimes(punch) : null;
   return `
@@ -568,7 +617,7 @@ function timelineBounds(shifts, includeActual = false) {
   const ends = shifts.map((shift) => shift.end);
   if (includeActual) {
     shifts.forEach((shift) => {
-      const punch = shiftPunch(shift.id);
+      const punch = shiftPunch(shift);
       if (!punch) return;
       const actual = actualShiftTimes(punch);
       starts.push(actual.start);
@@ -596,7 +645,13 @@ function renderAdminView() {
       <div class="list-row">
         <div>
           <div class="title">${escapeHtml(person.name)}</div>
-          <div class="sub">コード ${escapeHtml(person.code)} / $${Number(person.wage).toFixed(2)} / hour</div>
+          <div class="sub">
+            コード
+            <button class="code-chip" type="button" data-action="show-staff-code" data-staff-id="${person.id}">
+              ${escapeHtml(person.code)}
+            </button>
+            / $${Number(person.wage).toFixed(2)} / hour
+          </div>
         </div>
         <div class="row-actions">
           <button class="ghost" data-action="edit-staff" data-staff-id="${person.id}">編集</button>
@@ -943,8 +998,10 @@ function dateTimeLabel(date) {
   return `${localDateKey(date)} ${timeLabel(date)}`;
 }
 
-function dateTimeInputValue(date) {
-  return `${localDateKey(date)}T${timeLabel(date)}`;
+function dateTimeFromFields(dateValue, timeValue) {
+  if (!dateValue || !timeValue) return null;
+  const date = new Date(`${dateValue}T${timeValue}:00`);
+  return Number.isNaN(date.getTime()) ? null : date;
 }
 
 function escapeHtml(value) {
@@ -972,6 +1029,7 @@ document.addEventListener("click", (event) => {
   if (action?.dataset.action === "clock-in") clockIn(action.dataset.shiftId || null);
   if (action?.dataset.action === "edit-staff") openStaffDialog(action.dataset.staffId);
   if (action?.dataset.action === "delete-staff") deleteStaff(action.dataset.staffId);
+  if (action?.dataset.action === "show-staff-code") openStaffCodeDialog(action.dataset.staffId);
   if (action?.dataset.action === "edit-shift") openShiftDialog(action.dataset.shiftId);
   if (action?.dataset.action === "edit-punch") openPunchDialog(action.dataset.punchId);
 });
@@ -1017,6 +1075,7 @@ $("#openShiftModalBtn").addEventListener("click", () => openShiftDialog());
 $("#shiftCancelBtn").addEventListener("click", closeShiftDialog);
 $("#openStaffModalBtn").addEventListener("click", () => openStaffDialog());
 $("#staffCancelBtn").addEventListener("click", closeStaffDialog);
+$("#staffCodeCloseBtn").addEventListener("click", closeStaffCodeDialog);
 $("#punchCancelBtn").addEventListener("click", closePunchDialog);
 
 $("#passcodeForm").addEventListener("submit", (event) => {
@@ -1115,9 +1174,15 @@ $("#punchForm").addEventListener("submit", (event) => {
   event.preventDefault();
   const punch = state.punches.find((item) => item.id === $("#punchEditId").value);
   if (!punch) return;
-  const start = new Date($("#punchStartAt").value);
-  const endValue = $("#punchEndAt").value;
-  const end = endValue ? new Date(endValue) : null;
+  const start = dateTimeFromFields($("#punchStartDate").value, $("#punchStartTime").value);
+  const endDateValue = $("#punchEndDate").value;
+  const endTimeValue = $("#punchEndTime").value;
+  if ((endDateValue && !endTimeValue) || (!endDateValue && endTimeValue)) {
+    alert("終了日時は日付と時刻を両方入力してください。");
+    return;
+  }
+  const end = endDateValue && endTimeValue ? dateTimeFromFields(endDateValue, endTimeValue) : null;
+  if (!start) return;
   if (end && end <= start) {
     alert("終了時刻は開始時刻より後にしてください。");
     return;
@@ -1157,6 +1222,7 @@ $("#pdfExportBtn").addEventListener("click", () => {
 });
 
 const today = dateKey(new Date());
+populateTimeSelects();
 $("#shiftWeekStart").value = localDateKey(mondayOf(new Date()));
 $("#payStart").value = today;
 $("#payEnd").value = today;
@@ -1172,6 +1238,8 @@ render();
 
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {
-    navigator.serviceWorker.register("./sw.js");
+    navigator.serviceWorker.register("./sw.js", { updateViaCache: "none" })
+      .then((registration) => registration.update())
+      .catch(() => {});
   });
 }

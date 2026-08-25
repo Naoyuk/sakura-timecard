@@ -600,6 +600,18 @@ select {
   min-height: 40px;
 }
 
+.code-chip {
+  min-height: 28px;
+  padding: 0 9px;
+  border: 1px solid #8bc2df;
+  background: #edf8fd;
+  color: var(--ink);
+  font-size: 16px;
+  font-weight: 900;
+  font-variant-numeric: tabular-nums;
+  vertical-align: middle;
+}
+
 .list-row .title,
 .pay-row .title {
   font-weight: 800;
@@ -657,6 +669,34 @@ select {
   border: 1px solid var(--line);
 }
 
+.code-dialog-panel {
+  text-align: center;
+}
+
+.large-code-name {
+  color: var(--muted);
+  font-weight: 800;
+}
+
+.large-code {
+  padding: 14px;
+  border: 1px solid #8bc2df;
+  border-radius: 8px;
+  background: #edf8fd;
+  color: var(--ink);
+  font-size: clamp(56px, 18vw, 104px);
+  font-weight: 900;
+  line-height: 1;
+  letter-spacing: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.date-time-fields {
+  display: grid;
+  grid-template-columns: 1fr 132px;
+  gap: 8px;
+}
+
 .dialog-actions {
   display: flex;
   justify-content: flex-end;
@@ -701,6 +741,10 @@ select {
   .timeline-row {
     grid-template-columns: 1fr;
     gap: 6px;
+  }
+
+  .date-time-fields {
+    grid-template-columns: 1fr;
   }
 
   .week-switcher {

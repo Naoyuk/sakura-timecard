@@ -168,11 +168,11 @@
         </label>
         <label class="field">
           <span>開始</span>
-          <input id="shiftStart" required type="time" step="900" value="09:00">
+          <select id="shiftStart" class="time-select" required></select>
         </label>
         <label class="field">
           <span>終了</span>
-          <input id="shiftEnd" required type="time" step="900" value="17:00">
+          <select id="shiftEnd" class="time-select" required></select>
         </label>
         <div class="dialog-actions">
           <button type="button" id="shiftCancelBtn" class="ghost">キャンセル</button>
@@ -204,6 +204,17 @@
       </form>
     </div>
 
+    <div id="staffCodeDialog" class="dialog hidden" role="dialog" aria-modal="true" aria-labelledby="staffCodeDialogTitle">
+      <div class="dialog-panel code-dialog-panel">
+        <h2 id="staffCodeDialogTitle">スタッフコード</h2>
+        <div id="largeStaffName" class="large-code-name"></div>
+        <div id="largeStaffCode" class="large-code"></div>
+        <div class="dialog-actions">
+          <button type="button" id="staffCodeCloseBtn">Close</button>
+        </div>
+      </div>
+    </div>
+
     <div id="punchDialog" class="dialog hidden" role="dialog" aria-modal="true" aria-labelledby="punchDialogTitle">
       <form id="punchForm" class="dialog-panel">
         <h2 id="punchDialogTitle">打刻修正</h2>
@@ -214,15 +225,21 @@
         </label>
         <label class="field">
           <span>開始</span>
-          <input id="punchStartAt" required type="datetime-local" step="900">
+          <div class="date-time-fields">
+            <input id="punchStartDate" required type="date">
+            <select id="punchStartTime" class="time-select" required></select>
+          </div>
         </label>
         <label class="field">
           <span>終了</span>
-          <input id="punchEndAt" type="datetime-local" step="900">
+          <div class="date-time-fields">
+            <input id="punchEndDate" type="date">
+            <select id="punchEndTime" class="time-select"></select>
+          </div>
         </label>
         <div class="dialog-actions">
           <button type="button" id="punchCancelBtn" class="ghost">キャンセル</button>
-          <button type="submit">保存</button>
+          <button type="submit">Save</button>
         </div>
       </form>
     </div>
@@ -238,6 +255,6 @@
       </div>
     </div>
 
-    <script src="app.js"></script>
+    <script src="app.js?v=11"></script>
   </body>
 </html>
