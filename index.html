@@ -92,6 +92,11 @@
           </div>
 
           <div class="panel">
+            <h2>打刻修正</h2>
+            <div id="punchList" class="list"></div>
+          </div>
+
+          <div class="panel">
             <h2>スタッフ管理</h2>
             <div class="panel-actions">
               <button id="openStaffModalBtn" type="button">スタッフ追加</button>
@@ -195,6 +200,29 @@
         <div class="dialog-actions">
           <button id="staffCancelBtn" class="ghost" type="button">キャンセル</button>
           <button id="staffSubmitBtn" type="submit">追加</button>
+        </div>
+      </form>
+    </div>
+
+    <div id="punchDialog" class="dialog hidden" role="dialog" aria-modal="true" aria-labelledby="punchDialogTitle">
+      <form id="punchForm" class="dialog-panel">
+        <h2 id="punchDialogTitle">打刻修正</h2>
+        <input id="punchEditId" type="hidden">
+        <label class="field">
+          <span>スタッフ</span>
+          <input id="punchStaffName" disabled>
+        </label>
+        <label class="field">
+          <span>開始</span>
+          <input id="punchStartAt" required type="datetime-local" step="900">
+        </label>
+        <label class="field">
+          <span>終了</span>
+          <input id="punchEndAt" type="datetime-local" step="900">
+        </label>
+        <div class="dialog-actions">
+          <button type="button" id="punchCancelBtn" class="ghost">キャンセル</button>
+          <button type="submit">保存</button>
         </div>
       </form>
     </div>

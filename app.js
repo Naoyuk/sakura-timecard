@@ -243,6 +243,20 @@ function closeStaffDialog() {
   $("#staffDialog").classList.add("hidden");
 }
 
+function openPunchDialog(punchId) {
+  const punch = state.punches.find((item) => item.id === punchId);
+  if (!punch) return;
+  $("#punchEditId").value = punch.id;
+  $("#punchStaffName").value = staffName(punch.staffId);
+  $("#punchStartAt").value = dateTimeInputValue(new Date(punch.startAt));
+  $("#punchEndAt").value = punch.endAt ? dateTimeInputValue(new Date(punch.endAt)) : "";
+  $("#punchDialog").classList.remove("hidden");
+}
+
+function closePunchDialog() {
+  $("#punchDialog").classList.add("hidden");
+}
+
 function renderWeekLabel() {
   const dates = weekDates();
   const start = dates[0];
@@ -378,7 +392,7 @@ function renderShiftTimeline(shifts, showDate = true, locale = "ja") {
 
   return Object.entries(byDate)
     .map(([date, dateShifts]) => {
-      const bounds = timelineBounds(dateShifts);
+      const bounds = timelineBounds(dateShifts, locale === "en");
       return `
         <section class="timeline-day">
           ${showDate ? `<div class="timeline-date">${escapeHtml(timelineDateLabel(date, locale))}</div>` : ""}
@@ -433,24 +447,25 @@ function renderWeekTableRow(date) {
 
 function renderCompactShift(shift) {
   const punch = shiftPunch(shift.id);
+  const display = displayShiftTimes(shift, punch);
   return `
     <div class="compact-shift">
       <div class="compact-name">${escapeHtml(staffName(shift.staffId))}</div>
       <div class="compact-track">
-        <div class="compact-bar ${punch ? "worked" : ""}" style="${compactShiftStyle(shift)}"></div>
+        <div class="compact-bar ${punch ? "worked" : ""}" style="${compactShiftStyle(display)}"></div>
       </div>
-      <div class="compact-time">${minutesToTime(shift.start)}-${minutesToTime(shift.end)}</div>
+      <div class="compact-time">${minutesToTime(display.start)}-${display.end ? minutesToTime(display.end) : "..."}</div>
       <button class="compact-edit ghost" data-action="edit-shift" data-shift-id="${shift.id}" type="button">変更</button>
     </div>
   `;
 }
 
-function compactShiftStyle(shift) {
+function compactShiftStyle(item) {
   const startBound = 8 * 60;
   const endBound = 20 * 60;
   const total = endBound - startBound;
-  const start = Math.max(0, Math.min(total, shift.start - startBound));
-  const end = Math.max(0, Math.min(total, shift.end - startBound));
+  const start = Math.max(0, Math.min(total, item.start - startBound));
+  const end = Math.max(0, Math.min(total, (item.end || item.start + 15) - startBound));
   const width = Math.max(2, end - start);
   return `left: ${(start / total) * 100}%; width: ${(width / total) * 100}%;`;
 }
@@ -469,8 +484,11 @@ function timelineDateLabel(date, locale) {
 }
 
 function renderTimelineShift(shift, bounds, locale = "ja") {
+  if (locale === "en") return renderStaffTimelineShift(shift, bounds);
+
   const punch = shiftPunch(shift.id);
   const actual = shiftCoverageLabel(shift, punch, locale);
+  const display = displayShiftTimes(shift, punch);
   return `
     <div class="timeline-row">
       <div class="timeline-person">
@@ -478,13 +496,55 @@ function renderTimelineShift(shift, bounds, locale = "ja") {
         <div class="sub">${escapeHtml(actual)}</div>
       </div>
       <div class="timeline-track">
-        <div class="timeline-block ${punch ? "worked" : ""}" style="${timelineStyle(shift, bounds)}">
-          <strong>${minutesToTime(shift.start)} - ${minutesToTime(shift.end)}</strong>
+        <div class="timeline-block ${punch ? "worked" : ""}" style="${timelineStyle(display, bounds)}">
+          <strong>${minutesToTime(display.start)} - ${display.end ? minutesToTime(display.end) : "..."}</strong>
           <span>${shiftStatusLabel(punch, locale)}</span>
         </div>
       </div>
     </div>
   `;
+}
+
+function renderStaffTimelineShift(shift, bounds) {
+  const punch = shiftPunch(shift.id);
+  const actual = shiftCoverageLabel(shift, punch, "en");
+  const actualTimes = punch ? actualShiftTimes(punch) : null;
+  return `
+    <div class="timeline-row">
+      <div class="timeline-person">
+        <div class="title">${escapeHtml(staffName(shift.staffId))}</div>
+        <div class="sub">${escapeHtml(actual)}</div>
+      </div>
+      <div class="timeline-track stacked">
+        <div class="timeline-block planned" style="${timelineStyle(shift, bounds)}">
+          <strong>Scheduled ${minutesToTime(shift.start)} - ${minutesToTime(shift.end)}</strong>
+        </div>
+        ${actualTimes ? `
+          <div class="timeline-block actual" style="${timelineStyle(actualTimes, bounds)}">
+            <strong>Actual ${minutesToTime(actualTimes.start)} - ${minutesToTime(actualTimes.end)}</strong>
+            <span>${shiftStatusLabel(punch, "en")}</span>
+          </div>
+        ` : ""}
+      </div>
+    </div>
+  `;
+}
+
+function displayShiftTimes(shift, punch) {
+  if (!punch) return { start: shift.start, end: shift.end };
+  const start = dateToMinutes(new Date(punch.startAt));
+  const end = punch.endAt ? dateToMinutes(new Date(punch.endAt)) : null;
+  return { start, end };
+}
+
+function actualShiftTimes(punch) {
+  const start = dateToMinutes(new Date(punch.startAt));
+  const end = punch.endAt ? dateToMinutes(new Date(punch.endAt)) : dateToMinutes(new Date());
+  return { start, end: Math.max(end, start + 15) };
+}
+
+function dateToMinutes(date) {
+  return date.getHours() * 60 + date.getMinutes();
 }
 
 function shiftCoverageLabel(shift, punch, locale = "ja") {
@@ -503,9 +563,18 @@ function shiftStatusLabel(punch, locale = "ja") {
   return punch ? (punch.endAt ? "完了" : "勤務中") : "予定";
 }
 
-function timelineBounds(shifts) {
+function timelineBounds(shifts, includeActual = false) {
   const starts = shifts.map((shift) => shift.start);
   const ends = shifts.map((shift) => shift.end);
+  if (includeActual) {
+    shifts.forEach((shift) => {
+      const punch = shiftPunch(shift.id);
+      if (!punch) return;
+      const actual = actualShiftTimes(punch);
+      starts.push(actual.start);
+      ends.push(actual.end);
+    });
+  }
   const start = Math.min(8 * 60, ...starts);
   const end = Math.max(22 * 60, ...ends);
   return { start, end };
@@ -513,8 +582,11 @@ function timelineBounds(shifts) {
 
 function timelineStyle(shift, bounds) {
   const total = Math.max(15, bounds.end - bounds.start);
-  const start = Math.max(0, ((shift.start - bounds.start) / total) * 100);
-  const width = Math.max(4, ((shift.end - shift.start) / total) * 100);
+  const end = shift.end || shift.start + 15;
+  const visibleStart = Math.max(bounds.start, shift.start);
+  const visibleEnd = Math.min(bounds.end, Math.max(end, shift.start + 15));
+  const start = Math.min(100, Math.max(0, ((visibleStart - bounds.start) / total) * 100));
+  const width = Math.max(2, ((visibleEnd - visibleStart) / total) * 100);
   return `left: ${start}%; width: ${Math.min(width, 100 - start)}%;`;
 }
 
@@ -536,6 +608,27 @@ function renderAdminView() {
     : `<div class="empty">スタッフはまだ登録されていません。</div>`;
 
   $("#allShifts").innerHTML = renderWeeklyShifts();
+  $("#punchList").innerHTML = renderPunchList();
+}
+
+function renderPunchList() {
+  const punches = [...state.punches]
+    .sort((a, b) => new Date(b.startAt) - new Date(a.startAt))
+    .slice(0, 30);
+  if (!punches.length) return `<div class="empty">打刻データはまだありません。</div>`;
+  return punches.map((punch) => {
+    const start = new Date(punch.startAt);
+    const end = punch.endAt ? new Date(punch.endAt) : null;
+    return `
+      <div class="list-row">
+        <div>
+          <div class="title">${escapeHtml(staffName(punch.staffId))}</div>
+          <div class="sub">${dateTimeLabel(start)} - ${end ? dateTimeLabel(end) : "勤務中"}</div>
+        </div>
+        <button class="ghost" data-action="edit-punch" data-punch-id="${punch.id}" type="button">修正</button>
+      </div>
+    `;
+  }).join("");
 }
 
 function calculatePayroll(startDate, endDate, staffId = "all") {
@@ -846,6 +939,14 @@ function timeLabel(date) {
   return date.toLocaleTimeString("ja-JP", { hour: "2-digit", minute: "2-digit" });
 }
 
+function dateTimeLabel(date) {
+  return `${localDateKey(date)} ${timeLabel(date)}`;
+}
+
+function dateTimeInputValue(date) {
+  return `${localDateKey(date)}T${timeLabel(date)}`;
+}
+
 function escapeHtml(value) {
   return String(value).replace(/[&<>"']/g, (char) => ({
     "&": "&amp;",
@@ -872,6 +973,7 @@ document.addEventListener("click", (event) => {
   if (action?.dataset.action === "edit-staff") openStaffDialog(action.dataset.staffId);
   if (action?.dataset.action === "delete-staff") deleteStaff(action.dataset.staffId);
   if (action?.dataset.action === "edit-shift") openShiftDialog(action.dataset.shiftId);
+  if (action?.dataset.action === "edit-punch") openPunchDialog(action.dataset.punchId);
 });
 
 document.addEventListener("input", (event) => {
@@ -915,6 +1017,7 @@ $("#openShiftModalBtn").addEventListener("click", () => openShiftDialog());
 $("#shiftCancelBtn").addEventListener("click", closeShiftDialog);
 $("#openStaffModalBtn").addEventListener("click", () => openStaffDialog());
 $("#staffCancelBtn").addEventListener("click", closeStaffDialog);
+$("#punchCancelBtn").addEventListener("click", closePunchDialog);
 
 $("#passcodeForm").addEventListener("submit", (event) => {
   event.preventDefault();
@@ -1008,6 +1111,23 @@ $("#shiftForm").addEventListener("submit", (event) => {
   render();
 });
 
+$("#punchForm").addEventListener("submit", (event) => {
+  event.preventDefault();
+  const punch = state.punches.find((item) => item.id === $("#punchEditId").value);
+  if (!punch) return;
+  const start = new Date($("#punchStartAt").value);
+  const endValue = $("#punchEndAt").value;
+  const end = endValue ? new Date(endValue) : null;
+  if (end && end <= start) {
+    alert("終了時刻は開始時刻より後にしてください。");
+    return;
+  }
+  punch.startAt = start.toISOString();
+  punch.endAt = end ? end.toISOString() : null;
+  closePunchDialog();
+  render();
+});
+
 $("#payrollForm").addEventListener("submit", (event) => {
   event.preventDefault();
   calculatePayroll($("#payStart").value, $("#payEnd").value, $("#payStaff").value);
@@ -1042,7 +1162,12 @@ $("#payStart").value = today;
 $("#payEnd").value = today;
 $("#staffCode").value = generateStaffCode();
 
-setInterval(renderHeader, 1000);
+setInterval(() => {
+  renderHeader();
+  if (activeViewId() === "staffView" && state.punches.some((punch) => !punch.endAt)) {
+    renderStaffView();
+  }
+}, 1000);
 render();
 
 if ("serviceWorker" in navigator) {
