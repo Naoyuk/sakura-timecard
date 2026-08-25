@@ -143,17 +143,27 @@ function shiftPunch(shiftOrId) {
   const exact = state.punches.find((punch) => punch.shiftId === shift.id);
   if (exact) return exact;
 
-  // Older device data may not have stored shiftId. Match that data without
-  // changing the saved record, so existing punches remain recoverable.
-  return state.punches.find((punch) => {
+  // Older device data may have an empty or stale shiftId. Match by the
+  // scheduled staff, local date, and overlapping time as a fallback.
+  const candidates = state.punches.filter((punch) => {
     const scheduledStaffId = punch.scheduledStaffId || punch.staffId;
-    if (punch.shiftId || scheduledStaffId !== shift.staffId || !punch.startAt) return false;
+    const pointsToKnownShift = punch.shiftId && state.shifts.some((item) => item.id === punch.shiftId);
+    if (pointsToKnownShift && punch.shiftId !== shift.id) return false;
+    if (scheduledStaffId !== shift.staffId || !punch.startAt) return false;
     const started = new Date(punch.startAt);
     if (Number.isNaN(started.getTime()) || localDateKey(started) !== shift.date) return false;
-    const start = dateToMinutes(started);
+    return true;
+  });
+  const overlaps = candidates.filter((punch) => {
+    const start = dateToMinutes(new Date(punch.startAt));
     const end = punch.endAt ? dateToMinutes(new Date(punch.endAt)) : start + 15;
     return end > shift.start && start < shift.end;
   });
+  const matched = overlaps[0] || candidates
+    .sort((a, b) => Math.abs(dateToMinutes(new Date(a.startAt)) - shift.start)
+      - Math.abs(dateToMinutes(new Date(b.startAt)) - shift.start))[0];
+  if (matched) matched.shiftId = shift.id;
+  return matched;
 }
 
 function todaysShifts() {
