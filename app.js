@@ -384,9 +384,8 @@ function signinChoices(staffId) {
   if (!cards.length) {
     cards.push(`
       <article class="shift-card">
-        <strong>Unscheduled Shift</strong>
-        <div class="meta">Time will be recorded in 15-minute increments.</div>
-        <button class="secondary" data-action="clock-in">Sign In</button>
+        <strong>No available shift</strong>
+        <div class="meta">You can sign in only for a scheduled shift or as coverage.</div>
       </article>
     `);
   }
@@ -936,6 +935,7 @@ function clockIn(shiftId = null) {
   if (!staffId || openPunchFor(staffId)) return;
 
   const shift = state.shifts.find((item) => item.id === shiftId);
+  if (!shift || shiftPunch(shift)) return;
   const startAt = roundToQuarter(new Date());
   state.punches.push({
     id: newId(),
