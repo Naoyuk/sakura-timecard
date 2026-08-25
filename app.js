@@ -931,9 +931,15 @@ $("#storeSettingsForm").addEventListener("submit", (event) => {
   const storeName = $("#storeNameInput").value.trim();
   if (!storeName) return;
   state.storeName = storeName;
-  saveState();
-  renderStoreName();
+  render();
   alert("店舗名を保存しました。");
+});
+
+$("#storeNameInput").addEventListener("input", () => {
+  const storeName = $("#storeNameInput").value.trim();
+  if (!storeName) return;
+  $("#storeNameHeading").textContent = storeName;
+  document.title = `Timecard | ${storeName}`;
 });
 
 $("#staffForm").addEventListener("submit", (event) => {
