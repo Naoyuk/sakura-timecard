@@ -16,7 +16,7 @@
     <div class="app-shell">
       <header class="topbar">
         <div>
-          <h1>Sakura Mart</h1>
+          <h1 id="storeNameHeading">Sakura Mart</h1>
           <p id="todayLabel"></p>
         </div>
         <nav class="tabs" aria-label="画面切り替え">
@@ -117,6 +117,17 @@
                 <input id="newPasscode" required type="password" inputmode="numeric" autocomplete="new-password">
               </label>
               <button type="submit">変更</button>
+            </form>
+          </div>
+
+          <div class="panel">
+            <h2>店舗設定</h2>
+            <form id="storeSettingsForm" class="passcode-form">
+              <label class="field">
+                <span>店舗名</span>
+                <input id="storeNameInput" required autocomplete="organization">
+              </label>
+              <button type="submit">保存</button>
             </form>
           </div>
         </section>

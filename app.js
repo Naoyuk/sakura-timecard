@@ -22,7 +22,12 @@ function loadState() {
   if (saved) {
     const parsed = JSON.parse(saved);
     parsed.staff = staffWithCodes(parsed.staff || []);
-    return { ...parsed, shiftNotes: parsed.shiftNotes || {}, adminPasscode: parsed.adminPasscode || "1968" };
+    return {
+      ...parsed,
+      storeName: parsed.storeName || "Sakura Mart",
+      shiftNotes: parsed.shiftNotes || {},
+      adminPasscode: parsed.adminPasscode || "1968",
+    };
   }
 
   const today = dateKey(new Date());
@@ -34,6 +39,7 @@ function loadState() {
     ]),
     shifts: [],
     punches: [],
+    storeName: "Sakura Mart",
     shiftNotes: {},
     adminPasscode: "1968",
     today,
@@ -139,11 +145,21 @@ function todaysShifts() {
 }
 
 function render() {
+  renderStoreName();
   renderHeader();
   renderStaffOptions();
   renderStaffView();
   renderAdminView();
   saveState();
+}
+
+function renderStoreName() {
+  const storeName = state.storeName || "Sakura Mart";
+  $("#storeNameHeading").textContent = storeName;
+  document.title = `Timecard | ${storeName}`;
+  const appleTitle = document.querySelector("meta[name='apple-mobile-web-app-title']");
+  if (appleTitle) appleTitle.setAttribute("content", storeName);
+  if ($("#storeNameInput")) $("#storeNameInput").value = storeName;
 }
 
 function renderHeader() {
@@ -908,6 +924,16 @@ $("#passcodeForm").addEventListener("submit", (event) => {
   $("#newPasscode").value = "";
   saveState();
   alert("管理者パスコードを変更しました。");
+});
+
+$("#storeSettingsForm").addEventListener("submit", (event) => {
+  event.preventDefault();
+  const storeName = $("#storeNameInput").value.trim();
+  if (!storeName) return;
+  state.storeName = storeName;
+  saveState();
+  renderStoreName();
+  alert("店舗名を保存しました。");
 });
 
 $("#staffForm").addEventListener("submit", (event) => {
