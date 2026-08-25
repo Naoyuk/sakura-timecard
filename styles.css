@@ -419,6 +419,10 @@ select {
   background: #fff;
 }
 
+.compact-track.stacked {
+  height: 22px;
+}
+
 .compact-bar {
   position: absolute;
   top: 1px;
@@ -427,14 +431,32 @@ select {
   background: var(--green);
 }
 
-.compact-bar.worked {
-  background: var(--blue);
+.compact-bar.planned,
+.compact-bar.actual {
+  bottom: auto;
+  height: 8px;
+}
+
+.compact-bar.planned {
+  top: 1px;
+  background: #2aa7e8;
+}
+
+.compact-bar.actual {
+  top: 12px;
+  background: #f0525f;
 }
 
 .compact-time {
   color: var(--muted);
   font-variant-numeric: tabular-nums;
   text-align: right;
+  line-height: 1.15;
+}
+
+.compact-time span {
+  display: block;
+  white-space: nowrap;
 }
 
 .compact-edit {

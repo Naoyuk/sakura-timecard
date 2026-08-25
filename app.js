@@ -495,14 +495,18 @@ function renderWeekTableRow(date) {
 
 function renderCompactShift(shift) {
   const punch = shiftPunch(shift);
-  const display = displayShiftTimes(shift, punch);
+  const actual = punch ? actualShiftTimes(punch) : null;
   return `
     <div class="compact-shift">
       <div class="compact-name">${escapeHtml(staffName(shift.staffId))}</div>
-      <div class="compact-track">
-        <div class="compact-bar ${punch ? "worked" : ""}" style="${compactShiftStyle(display)}"></div>
+      <div class="compact-track stacked">
+        <div class="compact-bar planned" style="${compactShiftStyle(shift)}"></div>
+        ${actual ? `<div class="compact-bar actual" style="${compactShiftStyle(actual)}"></div>` : ""}
       </div>
-      <div class="compact-time">${minutesToTime(display.start)}-${display.end ? minutesToTime(display.end) : "..."}</div>
+      <div class="compact-time">
+        <span>予定 ${minutesToTime(shift.start)}-${minutesToTime(shift.end)}</span>
+        ${actual ? `<span>実績 ${minutesToTime(actual.start)}-${minutesToTime(actual.end)}</span>` : ""}
+      </div>
       <button class="compact-edit ghost" data-action="edit-shift" data-shift-id="${shift.id}" type="button">変更</button>
     </div>
   `;
