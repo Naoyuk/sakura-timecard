@@ -725,6 +725,13 @@ select {
   gap: 8px;
 }
 
+.app-footer {
+  padding: 18px 0 4px;
+  color: var(--muted);
+  font-size: 12px;
+  text-align: center;
+}
+
 @media (max-width: 760px) {
   .app-shell {
     padding: 12px;
