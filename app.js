@@ -1,5 +1,5 @@
 const storeKey = "grocery-timecard-v1";
-const APP_VERSION = "1.0.4";
+const APP_VERSION = "1.0.5";
 const TIME_ZONE = "America/Vancouver";
 const formatter = new Intl.DateTimeFormat("ja-JP", {
   year: "numeric",
@@ -227,12 +227,12 @@ function todaysShifts() {
 }
 
 function render() {
+  saveState();
   renderStoreName();
   renderHeader();
   renderStaffOptions();
   renderStaffView();
   renderAdminView();
-  saveState();
 }
 
 function renderStoreName() {
