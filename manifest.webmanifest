@@ -1,0 +1,19 @@
+{
+  "name": "Sakura Mart Timecard",
+  "short_name": "Timecard",
+  "description": "Timecard and shift tracking for Sakura Mart.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#fff8e5",
+  "theme_color": "#0059a8",
+  "orientation": "landscape-primary",
+  "icons": [
+    {
+      "src": "./icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

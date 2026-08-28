@@ -10,6 +10,7 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
+    "build:pages": "vite build --config vite.pages.config.js && node scripts/sync-pages.mjs",
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest"
