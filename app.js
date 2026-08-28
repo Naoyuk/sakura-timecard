@@ -1,5 +1,5 @@
 const storeKey = "grocery-timecard-v1";
-const APP_VERSION = "1.0.3";
+const APP_VERSION = "1.0.4";
 const TIME_ZONE = "America/Vancouver";
 const formatter = new Intl.DateTimeFormat("ja-JP", {
   year: "numeric",
@@ -526,7 +526,7 @@ function renderShiftTimeline(shifts, showDate = true, locale = "ja") {
 }
 
 function renderWeeklyShifts() {
-  const dates = weekDates().map(localDateKey);
+  const dates = weekDates();
   return `
     <div class="week-table">
       <div class="week-table-head">
