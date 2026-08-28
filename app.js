@@ -1,15 +1,38 @@
 const storeKey = "grocery-timecard-v1";
+const TIME_ZONE = "America/Vancouver";
 const formatter = new Intl.DateTimeFormat("ja-JP", {
   year: "numeric",
   month: "long",
   day: "numeric",
   weekday: "long",
+  timeZone: TIME_ZONE,
 });
 const staffFormatter = new Intl.DateTimeFormat("en-US", {
   weekday: "long",
   month: "long",
   day: "numeric",
   year: "numeric",
+  timeZone: TIME_ZONE,
+});
+const timeFormatter = new Intl.DateTimeFormat("ja-JP", {
+  hour: "2-digit",
+  minute: "2-digit",
+  hour12: false,
+  timeZone: TIME_ZONE,
+});
+const zonedPartsFormatter = new Intl.DateTimeFormat("en-CA", {
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+  hour: "2-digit",
+  minute: "2-digit",
+  second: "2-digit",
+  hourCycle: "h23",
+  timeZone: TIME_ZONE,
+});
+const zoneOffsetFormatter = new Intl.DateTimeFormat("en-US", {
+  timeZone: TIME_ZONE,
+  timeZoneName: "shortOffset",
 });
 
 const state = loadState();
@@ -30,7 +53,7 @@ function loadState() {
     };
   }
 
-  const today = dateKey(new Date());
+  const today = localDateKey(new Date());
   return {
     staff: staffWithCodes([
       { id: newId(), name: "Aさん", wage: 18.25 },
@@ -51,33 +74,61 @@ function saveState() {
 }
 
 function dateKey(date) {
-  return date.toISOString().slice(0, 10);
+  const parts = zonedParts(date);
+  return `${parts.year}-${parts.month}-${parts.day}`;
 }
 
 function localDateKey(date) {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
+  return dateKey(date);
 }
 
-function addDays(date, days) {
-  const next = new Date(date);
-  next.setDate(next.getDate() + days);
-  return next;
+function zonedParts(date) {
+  return zonedPartsFormatter.formatToParts(date).reduce((result, part) => {
+    if (part.type !== "literal") result[part.type] = part.value;
+    return result;
+  }, {});
 }
 
-function mondayOf(date) {
-  const monday = new Date(date);
-  const day = monday.getDay() || 7;
-  monday.setDate(monday.getDate() - day + 1);
-  monday.setHours(0, 0, 0, 0);
-  return monday;
+function parseDateKey(value) {
+  const [year, month, day] = value.split("-").map(Number);
+  return { year, month, day };
+}
+
+function dateKeyFromUtcDate(date) {
+  return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, "0")}-${String(date.getUTCDate()).padStart(2, "0")}`;
+}
+
+function plainDateToUtcDate(value) {
+  const { year, month, day } = parseDateKey(value);
+  return new Date(Date.UTC(year, month - 1, day, 12));
+}
+
+function addDays(dateValue, days) {
+  const next = plainDateToUtcDate(dateValue);
+  next.setUTCDate(next.getUTCDate() + days);
+  return dateKeyFromUtcDate(next);
+}
+
+function mondayOf(dateValue) {
+  const monday = plainDateToUtcDate(dateValue);
+  const day = monday.getUTCDay() || 7;
+  monday.setUTCDate(monday.getUTCDate() - day + 1);
+  return dateKeyFromUtcDate(monday);
 }
 
 function weekDates() {
-  const start = new Date(`${$("#shiftWeekStart").value}T00:00:00`);
+  const start = $("#shiftWeekStart").value;
   return Array.from({ length: 7 }, (_, index) => addDays(start, index));
+}
+
+function getTimeZoneOffsetMinutes(date) {
+  const label = zoneOffsetFormatter.formatToParts(date).find((part) => part.type === "timeZoneName")?.value || "GMT";
+  const match = label.match(/GMT([+-])(\d{1,2})(?::?(\d{2}))?/);
+  if (!match) return 0;
+  const sign = match[1] === "+" ? 1 : -1;
+  const hours = Number(match[2]);
+  const minutes = Number(match[3] || 0);
+  return sign * (hours * 60 + minutes);
 }
 
 function newId() {
@@ -116,10 +167,12 @@ function timeToMinutes(value) {
 
 function roundToQuarter(date) {
   const rounded = new Date(date);
-  const minutes = rounded.getHours() * 60 + rounded.getMinutes();
+  const minutes = dateToMinutes(rounded);
   const quarter = Math.round(minutes / 15) * 15;
-  rounded.setHours(Math.floor(quarter / 60), quarter % 60, 0, 0);
-  return rounded;
+  const dayOffset = Math.floor(quarter / (24 * 60));
+  const normalized = ((quarter % (24 * 60)) + (24 * 60)) % (24 * 60);
+  const roundedDateKey = addDays(dateKey(rounded), dayOffset);
+  return dateTimeFromDateKeyAndMinutes(roundedDateKey, normalized);
 }
 
 function staffName(id) {
@@ -168,7 +221,7 @@ function shiftPunch(shiftOrId) {
 
 function todaysShifts() {
   return state.shifts
-    .filter((shift) => shift.date === dateKey(new Date()))
+    .filter((shift) => shift.date === localDateKey(new Date()))
     .sort((a, b) => a.start - b.start);
 }
 
@@ -193,10 +246,7 @@ function renderStoreName() {
 function renderHeader() {
   const now = new Date();
   $("#todayLabel").textContent = activeViewId() === "staffView" ? staffFormatter.format(now) : formatter.format(now);
-  $("#clock").textContent = now.toLocaleTimeString("ja-JP", {
-    hour: "2-digit",
-    minute: "2-digit",
-  });
+  $("#clock").textContent = timeLabel(now);
 }
 
 function activeViewId() {
@@ -258,7 +308,7 @@ function resetShiftForm() {
   $("#shiftEditId").value = "";
   $("#shiftStart").value = "09:00";
   $("#shiftEnd").value = "17:00";
-  $("#shiftDate").value = weekDates().map(localDateKey)[0];
+  $("#shiftDate").value = weekDates()[0];
 }
 
 function openStaffDialog(staffId = "") {
@@ -309,8 +359,7 @@ function renderWeekLabel() {
 }
 
 function moveShiftWeek(days) {
-  const current = new Date(`${$("#shiftWeekStart").value}T00:00:00`);
-  $("#shiftWeekStart").value = localDateKey(addDays(current, days));
+  $("#shiftWeekStart").value = addDays($("#shiftWeekStart").value, days);
   render();
 }
 
@@ -324,8 +373,7 @@ function renderStaffOptions() {
   $("#payStaff").innerHTML = `<option value="all">全員まとめて</option>${options}`;
   $("#shiftDate").innerHTML = weekDates()
     .map((date) => {
-      const value = localDateKey(date);
-      return `<option value="${value}">${weekDayLabel(date, "ja")}</option>`;
+      return `<option value="${date}">${weekDayLabel(date, "ja")}</option>`;
     })
     .join("");
   if (selectedPay) $("#payStaff").value = selectedPay;
@@ -489,7 +537,7 @@ function renderWeekTableRow(date) {
     .sort((a, b) => a.start - b.start);
   return `
     <div class="week-table-row">
-      <div class="week-date">${escapeHtml(weekDayLabel(new Date(`${date}T00:00:00`), "ja"))}</div>
+      <div class="week-date">${escapeHtml(weekDayLabel(date, "ja"))}</div>
       <div class="week-shifts">
         <div class="compact-scale"><span>8</span><span>14</span><span>20</span></div>
         ${
@@ -533,15 +581,16 @@ function compactShiftStyle(item) {
 }
 
 function weekDayLabel(date, locale = "ja") {
+  const value = typeof date === "string" ? plainDateToUtcDate(date) : date;
   if (locale === "en") {
-    return date.toLocaleDateString("en-US", { weekday: "short", month: "numeric", day: "numeric" });
+    return value.toLocaleDateString("en-US", { weekday: "short", month: "numeric", day: "numeric", timeZone: "UTC" });
   }
   const names = ["日", "月", "火", "水", "木", "金", "土"];
-  return `${date.getMonth() + 1}/${date.getDate()} (${names[date.getDay()]})`;
+  return `${value.getUTCMonth() + 1}/${value.getUTCDate()} (${names[value.getUTCDay()]})`;
 }
 
 function timelineDateLabel(date, locale) {
-  if (locale === "en") return weekDayLabel(new Date(`${date}T00:00:00`), "en");
+  if (locale === "en") return weekDayLabel(date, "en");
   return date;
 }
 
@@ -606,7 +655,8 @@ function actualShiftTimes(punch) {
 }
 
 function dateToMinutes(date) {
-  return date.getHours() * 60 + date.getMinutes();
+  const parts = zonedParts(date);
+  return Number(parts.hour) * 60 + Number(parts.minute);
 }
 
 function shiftCoverageLabel(shift, punch, locale = "ja") {
@@ -717,8 +767,8 @@ function calculatePayroll(startDate, endDate, staffId = "all") {
 }
 
 function payrollRows(startDate, endDate, staffId = "all") {
-  const start = new Date(`${startDate}T00:00:00`);
-  const end = new Date(`${endDate}T23:59:59`);
+  const start = dateTimeFromFields(startDate, "00:00");
+  const end = dateTimeFromFields(endDate, "23:59");
   return state.staff
     .filter((person) => staffId === "all" || person.id === staffId)
     .map((person) => {
@@ -736,8 +786,8 @@ function payrollRows(startDate, endDate, staffId = "all") {
 }
 
 function punchRows(startDate, endDate, staffId = "all") {
-  const start = new Date(`${startDate}T00:00:00`);
-  const end = new Date(`${endDate}T23:59:59`);
+  const start = dateTimeFromFields(startDate, "00:00");
+  const end = dateTimeFromFields(endDate, "23:59");
   return state.punches
     .filter((punch) => {
       if (staffId !== "all" && punch.staffId !== staffId) return false;
@@ -1006,17 +1056,32 @@ function deleteStaff(staffId) {
 }
 
 function timeLabel(date) {
-  return date.toLocaleTimeString("ja-JP", { hour: "2-digit", minute: "2-digit" });
+  return timeFormatter.format(date);
 }
 
 function dateTimeLabel(date) {
-  return `${localDateKey(date)} ${timeLabel(date)}`;
+  return `${dateKey(date)} ${timeLabel(date)}`;
 }
 
 function dateTimeFromFields(dateValue, timeValue) {
   if (!dateValue || !timeValue) return null;
-  const date = new Date(`${dateValue}T${timeValue}:00`);
+  const { year, month, day } = parseDateKey(dateValue);
+  const [hours, minutes] = timeValue.split(":").map(Number);
+  let utcMillis = Date.UTC(year, month - 1, day, hours, minutes, 0);
+  for (let index = 0; index < 2; index += 1) {
+    const offset = getTimeZoneOffsetMinutes(new Date(utcMillis));
+    const corrected = Date.UTC(year, month - 1, day, hours, minutes, 0) - offset * 60000;
+    if (corrected === utcMillis) break;
+    utcMillis = corrected;
+  }
+  const date = new Date(utcMillis);
   return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function dateTimeFromDateKeyAndMinutes(dateValue, minutes) {
+  const hours = String(Math.floor(minutes / 60)).padStart(2, "0");
+  const mins = String(minutes % 60).padStart(2, "0");
+  return dateTimeFromFields(dateValue, `${hours}:${mins}`);
 }
 
 function escapeHtml(value) {
@@ -1061,6 +1126,7 @@ $("#clockOutBtn").addEventListener("click", clockOut);
 $("#staffCodeForm").addEventListener("submit", (event) => {
   event.preventDefault();
   const code = $("#staffCodeInput").value.trim();
+  $("#staffCodeInput").value = "";
   const person = state.staff.find((item) => item.code === code);
   if (!person) {
     activeStaffId = "";
@@ -1238,7 +1304,7 @@ $("#pdfExportBtn").addEventListener("click", () => {
 
 const today = dateKey(new Date());
 populateTimeSelects();
-$("#shiftWeekStart").value = localDateKey(mondayOf(new Date()));
+$("#shiftWeekStart").value = mondayOf(today);
 $("#payStart").value = today;
 $("#payEnd").value = today;
 $("#staffCode").value = generateStaffCode();
