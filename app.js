@@ -739,10 +739,13 @@ function renderAdminView() {
 
 function renderPunchList() {
   const punches = [...state.punches]
-    .filter((punch) => !punch.endAt)
-    .sort((a, b) => new Date(b.startAt) - new Date(a.startAt))
+    .sort((a, b) => {
+      if (!a.endAt && b.endAt) return -1;
+      if (a.endAt && !b.endAt) return 1;
+      return new Date(b.startAt) - new Date(a.startAt);
+    })
     .slice(0, 30);
-  if (!punches.length) return `<div class="empty">勤務中の打刻はありません。</div>`;
+  if (!punches.length) return `<div class="empty">打刻データはまだありません。</div>`;
   return punches.map((punch) => {
     const start = new Date(punch.startAt);
     const end = punch.endAt ? new Date(punch.endAt) : null;
