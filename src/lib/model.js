@@ -311,6 +311,47 @@ export function updatePunchRecord(state, punchId, startDate, startTime, endDate,
   };
 }
 
+export function createPunchRecord(state, staffId, startDate, startTime, endDate, endTime) {
+  const person = state.staff.find((item) => item.id === staffId);
+  if (!person) return { state, error: "スタッフを選択してください。" };
+
+  const start = dateTimeFromFields(startDate, startTime);
+  if (!start) return { state, error: "開始日時が正しくありません。" };
+  const hasPartialEnd = (endDate && !endTime) || (!endDate && endTime);
+  if (hasPartialEnd) return { state, error: "終了日時は日付と時刻を両方入力してください。" };
+  const end = endDate && endTime ? dateTimeFromFields(endDate, endTime) : null;
+  if (end && end <= start) return { state, error: "終了時刻は開始時刻より後にしてください。" };
+
+  const startMinutes = dateToMinutes(start);
+  const endMinutes = end ? dateToMinutes(end) : startMinutes + 15;
+  const matchingShift = state.shifts.find((shift) => (
+    shift.staffId === staffId
+    && shift.date === startDate
+    && endMinutes > shift.start
+    && startMinutes < shift.end
+  ));
+
+  if (matchingShift && shiftPunch(state, matchingShift)) {
+    return { state, error: "このシフトには既に打刻があります。既存の打刻を修正してください。" };
+  }
+
+  const nextPunch = {
+    id: newId(),
+    staffId,
+    shiftId: matchingShift?.id || "",
+    scheduledStaffId: matchingShift?.staffId || staffId,
+    startAt: start.toISOString(),
+    endAt: end ? end.toISOString() : null,
+  };
+
+  return {
+    state: {
+      ...state,
+      punches: [...state.punches, nextPunch],
+    },
+  };
+}
+
 export function updateShiftNote(state, date, value) {
   return {
     ...state,

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   applyClockIn,
   applyClockOut,
+  createPunchRecord,
   createDefaultState,
   payrollRows,
   recentPunches,
@@ -86,5 +87,27 @@ describe("model helpers", () => {
       },
     ];
     expect(recentPunches(state).map((item) => item.id)).toEqual(["active", "done"]);
+  });
+
+  it("allows a manager to create a manual punch for a missed shift", () => {
+    const result = createPunchRecord(buildState(), "staff-a", "2026-08-27", "10:00", "2026-08-27", "16:00");
+    expect(result.error).toBeUndefined();
+    expect(result.state.punches).toHaveLength(1);
+    expect(result.state.punches[0].shiftId).toBe("shift-a");
+    expect(result.state.punches[0].scheduledStaffId).toBe("staff-a");
+  });
+
+  it("prevents duplicate manual punches for the same scheduled shift", () => {
+    const state = buildState();
+    state.punches.push({
+      id: "existing",
+      staffId: "staff-a",
+      shiftId: "shift-a",
+      scheduledStaffId: "staff-a",
+      startAt: "2026-08-27T17:00:00.000Z",
+      endAt: "2026-08-27T23:00:00.000Z",
+    });
+    const result = createPunchRecord(state, "staff-a", "2026-08-27", "10:00", "2026-08-27", "16:00");
+    expect(result.error).toBe("このシフトには既に打刻があります。既存の打刻を修正してください。");
   });
 });

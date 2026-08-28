@@ -6,6 +6,7 @@ import {
   applyClockIn,
   applyClockOut,
   compactShiftStyle,
+  createPunchRecord,
   deleteStaffRecord,
   displayShiftLabel,
   displayShiftTimes,
@@ -55,7 +56,9 @@ const emptyShiftForm = (startDate) => ({
 });
 
 const emptyPunchForm = {
+  mode: "create",
   id: "",
+  staffId: "",
   staffName: "",
   startDate: "",
   startTime: "",
@@ -171,12 +174,28 @@ export default function App() {
     const start = new Date(punch.startAt);
     const end = punch.endAt ? new Date(punch.endAt) : null;
     setPunchForm({
+      mode: "edit",
       id: punch.id,
+      staffId: punch.staffId,
       staffName: staffName(state, punch.staffId),
       startDate: dateKey(start),
       startTime: timeLabel(start),
       endDate: end ? dateKey(end) : "",
       endTime: end ? timeLabel(end) : "",
+    });
+    setShowPunchDialog(true);
+  }
+
+  function openManualPunchDialog() {
+    setPunchForm({
+      mode: "create",
+      id: "",
+      staffId: state.staff[0]?.id || "",
+      staffName: "",
+      startDate: today,
+      startTime: "09:00",
+      endDate: today,
+      endTime: "17:00",
     });
     setShowPunchDialog(true);
   }
@@ -254,14 +273,30 @@ export default function App() {
 
   function handleSavePunch(event) {
     event.preventDefault();
-    const result = updatePunchRecord(
-      state,
-      punchForm.id,
-      punchForm.startDate,
-      punchForm.startTime,
-      punchForm.endDate,
-      punchForm.endTime,
-    );
+    const form = new FormData(event.currentTarget);
+    const staffId = String(form.get("staffId") || punchForm.staffId);
+    const startDate = String(form.get("startDate") || punchForm.startDate);
+    const startTime = String(form.get("startTime") || punchForm.startTime);
+    const endDate = String(form.get("endDate") || punchForm.endDate);
+    const endTime = String(form.get("endTime") || punchForm.endTime);
+
+    const result = punchForm.mode === "create"
+      ? createPunchRecord(
+        state,
+        staffId,
+        startDate,
+        startTime,
+        endDate,
+        endTime,
+      )
+      : updatePunchRecord(
+        state,
+        punchForm.id,
+        startDate,
+        startTime,
+        endDate,
+        endTime,
+      );
     if (result.error) {
       window.alert(result.error);
       return;
@@ -433,6 +468,9 @@ export default function App() {
 
             <div className="panel">
               <h2>打刻修正</h2>
+              <div className="panel-actions">
+                <button onClick={openManualPunchDialog} type="button">手動打刻追加</button>
+              </div>
               <div className="list" id="punchList">
                 {!recentPunchRows.length ? <div className="empty">打刻データはまだありません。</div> : recentPunchRows.map((punch) => (
                   <div className="list-row" key={punch.id}>
@@ -621,28 +659,59 @@ export default function App() {
       {showPunchDialog ? (
         <Dialog onClose={() => setShowPunchDialog(false)} title="打刻修正">
           <form className="dialog-panel" onSubmit={handleSavePunch}>
-            <h2>打刻修正</h2>
+            <h2>{punchForm.mode === "create" ? "手動打刻追加" : "打刻修正"}</h2>
             <label className="field">
               <span>スタッフ</span>
-              <input disabled value={punchForm.staffName} />
+              {punchForm.mode === "create" ? (
+                <select
+                  name="staffId"
+                  value={punchForm.staffId}
+                  onChange={(event) => setPunchForm((current) => ({ ...current, staffId: event.target.value }))}
+                >
+                  <option value="">選択してください</option>
+                  {state.staff.map((person) => <option key={person.id} value={person.id}>{person.name}</option>)}
+                </select>
+              ) : (
+                <input disabled value={punchForm.staffName} />
+              )}
             </label>
             <label className="field">
               <span>開始</span>
               <div className="date-time-fields">
-                <input required type="date" value={punchForm.startDate} onChange={(event) => setPunchForm((current) => ({ ...current, startDate: event.target.value }))} />
-                <TimeSelect value={punchForm.startTime} onChange={(value) => setPunchForm((current) => ({ ...current, startTime: value }))} />
+                <input
+                  name="startDate"
+                  required
+                  type="date"
+                  value={punchForm.startDate}
+                  onChange={(event) => setPunchForm((current) => ({ ...current, startDate: event.target.value }))}
+                />
+                <TimeSelect
+                  name="startTime"
+                  value={punchForm.startTime}
+                  onChange={(value) => setPunchForm((current) => ({ ...current, startTime: value }))}
+                />
               </div>
             </label>
             <label className="field">
               <span>終了</span>
               <div className="date-time-fields">
-                <input type="date" value={punchForm.endDate} onChange={(event) => setPunchForm((current) => ({ ...current, endDate: event.target.value }))} />
-                <TimeSelect allowEmpty value={punchForm.endTime} onChange={(value) => setPunchForm((current) => ({ ...current, endTime: value }))} />
+                <input
+                  name="endDate"
+                  type="date"
+                  value={punchForm.endDate}
+                  onChange={(event) => setPunchForm((current) => ({ ...current, endDate: event.target.value }))}
+                />
+                <TimeSelect
+                  allowEmpty
+                  name="endTime"
+                  value={punchForm.endTime}
+                  onChange={(value) => setPunchForm((current) => ({ ...current, endTime: value }))}
+                />
               </div>
             </label>
             <div className="dialog-actions">
               <button className="ghost" onClick={() => setShowPunchDialog(false)} type="button">キャンセル</button>
-              <button type="submit">Save</button>
+              <button type="submit">{punchForm.mode === "create" ? "追加" : "Save"}</button>
             </div>
           </form>
         </Dialog>
@@ -794,14 +863,14 @@ function SigninCard({ assigned, isSwap = false, onClockIn, shift }) {
   );
 }
 
-function TimeSelect({ allowEmpty = false, onChange, value }) {
+function TimeSelect({ allowEmpty = false, name, onChange, value }) {
   const options = [];
   if (allowEmpty) options.push(<option key="empty" value="">未入力</option>);
   for (let minutes = 0; minutes < 24 * 60; minutes += 15) {
     const label = minutesToTime(minutes);
     options.push(<option key={label} value={label}>{label}</option>);
   }
-  return <select className="time-select" value={value} onChange={(event) => onChange(event.target.value)}>{options}</select>;
+  return <select className="time-select" name={name} value={value} onChange={(event) => onChange(event.target.value)}>{options}</select>;
 }
 
 function Dialog({ children, onClose }) {
