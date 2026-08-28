@@ -1,8 +1,9 @@
-const CACHE_NAME = "sakura-mart-timecard-v111";
+const CACHE_NAME = "sakura-mart-timecard-v112";
+const APP_BASE = self.location.pathname.replace(/sw\.js$/, "");
 const APP_SHELL = [
-  "/",
-  "/manifest.webmanifest",
-  "/icon.svg",
+  APP_BASE,
+  `${APP_BASE}manifest.webmanifest`,
+  `${APP_BASE}icon.svg`,
 ];
 
 self.addEventListener("install", (event) => {
