@@ -1,10 +1,34 @@
-const CACHE_NAME = "sakura-mart-timecard-v113";
+const CACHE_NAME = "sakura-mart-timecard-v114";
 const APP_BASE = self.location.pathname.replace(/sw\.js$/, "");
 const APP_SHELL = [
   APP_BASE,
+  `${APP_BASE}assets/app.js`,
+  `${APP_BASE}assets/app.css`,
   `${APP_BASE}manifest.webmanifest`,
   `${APP_BASE}icon.svg`,
 ];
+
+function isAppRequest(url) {
+  return url.origin === self.location.origin && url.pathname.startsWith(APP_BASE);
+}
+
+async function networkFirst(request) {
+  const cache = await caches.open(CACHE_NAME);
+  try {
+    const response = await fetch(request);
+    if (response.ok && response.type === "basic") {
+      cache.put(request, response.clone());
+    }
+    return response;
+  } catch {
+    const cached = await cache.match(request);
+    if (cached) return cached;
+    if (request.mode === "navigate") {
+      return cache.match(APP_BASE);
+    }
+    throw new Error("Network unavailable");
+  }
+}
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
@@ -22,15 +46,15 @@ self.addEventListener("activate", (event) => {
   self.clients.claim();
 });
 
+self.addEventListener("message", (event) => {
+  if (event.data?.type === "SKIP_WAITING") {
+    self.skipWaiting();
+  }
+});
+
 self.addEventListener("fetch", (event) => {
   if (event.request.method !== "GET") return;
-  event.respondWith(
-    fetch(event.request)
-      .then((response) => {
-        const copy = response.clone();
-        caches.open(CACHE_NAME).then((cache) => cache.put(event.request, copy));
-        return response;
-      })
-      .catch(() => caches.match(event.request)),
-  );
+  const url = new URL(event.request.url);
+  if (!isAppRequest(url)) return;
+  event.respondWith(networkFirst(event.request));
 });
