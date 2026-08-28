@@ -1,4 +1,4 @@
-const CACHE_NAME = "sakura-mart-timecard-v17";
+const CACHE_NAME = "sakura-mart-timecard-v18";
 const APP_SHELL = [
   "./",
   "./index.html",

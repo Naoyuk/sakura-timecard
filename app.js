@@ -1,5 +1,5 @@
 const storeKey = "grocery-timecard-v1";
-const APP_VERSION = "1.0.2";
+const APP_VERSION = "1.0.3";
 const TIME_ZONE = "America/Vancouver";
 const formatter = new Intl.DateTimeFormat("ja-JP", {
   year: "numeric",
