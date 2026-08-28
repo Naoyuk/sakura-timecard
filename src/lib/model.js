@@ -258,7 +258,7 @@ export function deleteStaffRecord(state, staffId) {
   if (hasRecords) {
     return {
       state,
-      error: "このスタッフにはシフトまたは打刻データがあるため削除できません。名前や時給は編集できます。",
+      error: "このスタッフにはシフトまたは勤務記録があるため削除できません。名前や時給は編集できます。",
     };
   }
   return {
@@ -332,7 +332,7 @@ export function createPunchRecord(state, staffId, startDate, startTime, endDate,
   ));
 
   if (matchingShift && shiftPunch(state, matchingShift)) {
-    return { state, error: "このシフトには既に打刻があります。既存の打刻を修正してください。" };
+    return { state, error: "このシフトには既に勤務記録があります。既存の記録を修正してください。" };
   }
 
   const nextPunch = {

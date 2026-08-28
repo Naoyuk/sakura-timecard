@@ -202,6 +202,9 @@ export default function App() {
 
   function handleStaffCodeSubmit(event) {
     event.preventDefault();
+    if (document.activeElement instanceof HTMLElement) {
+      document.activeElement.blur();
+    }
     const code = staffCodeInput.trim();
     setStaffCodeInput("");
     const person = state.staff.find((item) => item.code === code);
@@ -366,6 +369,7 @@ export default function App() {
                   <span>Staff Code</span>
                   <input
                     autoComplete="off"
+                    enterKeyHint="done"
                     inputMode="numeric"
                     maxLength="5"
                     pattern="[0-9]{5}"
@@ -467,18 +471,18 @@ export default function App() {
             </div>
 
             <div className="panel">
-              <h2>打刻修正</h2>
+              <h2>勤務記録の修正</h2>
               <div className="panel-actions">
-                <button onClick={openManualPunchDialog} type="button">手動打刻追加</button>
+                <button onClick={openManualPunchDialog} type="button">勤務記録を追加</button>
               </div>
               <div className="list" id="punchList">
-                {!recentPunchRows.length ? <div className="empty">打刻データはまだありません。</div> : recentPunchRows.map((punch) => (
+                {!recentPunchRows.length ? <div className="empty">勤務記録はまだありません。</div> : recentPunchRows.map((punch) => (
                   <div className="list-row" key={punch.id}>
                     <div>
                       <div className="title">{staffName(state, punch.staffId)}</div>
                       <div className="sub">{dateTimeLabel(new Date(punch.startAt))} - {punch.endAt ? dateTimeLabel(new Date(punch.endAt)) : "勤務中"}</div>
                     </div>
-                    <button className="ghost" onClick={() => openPunchDialog(punch)} type="button">修正</button>
+                    <button className="ghost" onClick={() => openPunchDialog(punch)} type="button">編集</button>
                   </div>
                 ))}
               </div>
@@ -523,7 +527,7 @@ export default function App() {
                   <input className="hidden" onChange={handleBackupRestore} type="file" accept="application/json,.json" />
                 </label>
               </div>
-              <p className="note">スタッフ、シフト、打刻、備考、パスコードをまとめて保存・復元します。</p>
+              <p className="note">スタッフ、シフト、勤務記録、備考、パスコードをまとめて保存・復元します。</p>
             </div>
 
             <div className="panel">
@@ -575,7 +579,17 @@ export default function App() {
             <h2>管理者パスコード</h2>
             <label className="field">
               <span>パスコード</span>
-              <input autoFocus required type="password" value={passcodeInput} onChange={(event) => setPasscodeInput(event.target.value)} />
+              <input
+                autoFocus
+                autoComplete="current-password"
+                enterKeyHint="done"
+                inputMode="numeric"
+                pattern="[0-9]*"
+                required
+                type="password"
+                value={passcodeInput}
+                onChange={(event) => setPasscodeInput(event.target.value)}
+              />
             </label>
             <p className={`error ${passcodeError ? "" : "hidden"}`}>パスコードが違います。</p>
             <div className="dialog-actions">
@@ -657,9 +671,9 @@ export default function App() {
       ) : null}
 
       {showPunchDialog ? (
-        <Dialog onClose={() => setShowPunchDialog(false)} title="打刻修正">
+        <Dialog onClose={() => setShowPunchDialog(false)} title="勤務記録の編集">
           <form className="dialog-panel" onSubmit={handleSavePunch}>
-            <h2>{punchForm.mode === "create" ? "手動打刻追加" : "打刻修正"}</h2>
+            <h2>{punchForm.mode === "create" ? "勤務記録を追加" : "勤務記録を編集"}</h2>
             <label className="field">
               <span>スタッフ</span>
               {punchForm.mode === "create" ? (
@@ -711,7 +725,7 @@ export default function App() {
             </label>
             <div className="dialog-actions">
               <button className="ghost" onClick={() => setShowPunchDialog(false)} type="button">キャンセル</button>
-              <button type="submit">{punchForm.mode === "create" ? "追加" : "Save"}</button>
+              <button type="submit">{punchForm.mode === "create" ? "追加" : "保存"}</button>
             </div>
           </form>
         </Dialog>

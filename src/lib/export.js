@@ -81,7 +81,7 @@ export function exportPdf(state, startDate, endDate, staffId = "all") {
       <body>
         <h1>Timecard Report</h1>
         <p>${startDate} から ${endDate} / ${target}</p>
-        <h2>打刻</h2>
+        <h2>勤務記録</h2>
         ${reportTable(
           ["日付", "担当", "コード", "予定", "交代", "開始", "終了", "時間", "時給", "給与"],
           punches.map((row) => [

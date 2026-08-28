@@ -108,6 +108,6 @@ describe("model helpers", () => {
       endAt: "2026-08-27T23:00:00.000Z",
     });
     const result = createPunchRecord(state, "staff-a", "2026-08-27", "10:00", "2026-08-27", "16:00");
-    expect(result.error).toBe("このシフトには既に打刻があります。既存の打刻を修正してください。");
+    expect(result.error).toBe("このシフトには既に勤務記録があります。既存の記録を修正してください。");
   });
 });

@@ -29,10 +29,14 @@ describe("App", () => {
 
     render(<App />);
 
-    fireEvent.change(screen.getByLabelText("Staff Code"), { target: { value: "12345" } });
+    const staffCodeInput = screen.getByLabelText("Staff Code");
+    staffCodeInput.focus();
+    expect(staffCodeInput).toHaveFocus();
+    fireEvent.change(staffCodeInput, { target: { value: "12345" } });
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
     fireEvent.click(screen.getByRole("button", { name: "Sign In" }));
 
+    expect(staffCodeInput).not.toHaveFocus();
     expect(screen.queryByRole("button", { name: "Sign Out" })).toBeNull();
     expect(screen.getByText("Enter your staff code.")).toBeInTheDocument();
   });
@@ -56,7 +60,7 @@ describe("App", () => {
     fireEvent.change(within(passcodeDialog).getByLabelText("パスコード"), { target: { value: "1968" } });
     fireEvent.click(within(passcodeDialog).getByRole("button", { name: "開く" }));
 
-    fireEvent.click(screen.getAllByRole("button", { name: "手動打刻追加" })[0]);
+    fireEvent.click(screen.getAllByRole("button", { name: "勤務記録を追加" })[0]);
     const punchDialog = screen.getByRole("dialog");
     fireEvent.change(within(punchDialog).getByLabelText("スタッフ"), { target: { value: "staff-a" } });
     const dateInputs = punchDialog.querySelectorAll('input[type="date"]');
