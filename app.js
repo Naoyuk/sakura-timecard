@@ -254,6 +254,11 @@ function activeViewId() {
 }
 
 function switchView(viewId) {
+  if (viewId !== "staffView") {
+    activeStaffId = "";
+    $("#staffCodeInput").value = "";
+    $("#staffCodeError").classList.add("hidden");
+  }
   document.querySelectorAll(".tab").forEach((item) => {
     item.classList.toggle("active", item.dataset.view === viewId);
   });
@@ -416,7 +421,7 @@ function renderStaffView() {
     return;
   }
 
-  $("#staffCodeInput").disabled = Boolean(active);
+  $("#staffCodeInput").disabled = false;
   if (active) {
     const start = new Date(active.startAt);
     activeBox.classList.remove("hidden");
