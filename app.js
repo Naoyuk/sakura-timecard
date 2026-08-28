@@ -1,5 +1,5 @@
 const storeKey = "grocery-timecard-v1";
-const APP_VERSION = "1.0.1";
+const APP_VERSION = "1.0.2";
 const TIME_ZONE = "America/Vancouver";
 const formatter = new Intl.DateTimeFormat("ja-JP", {
   year: "numeric",
@@ -1021,6 +1021,7 @@ function clockIn(shiftId = null) {
   activeStaffId = "";
   $("#staffCodeInput").value = "";
   $("#staffCodeError").classList.add("hidden");
+  saveState();
   render();
 }
 
@@ -1030,6 +1031,8 @@ function clockOut() {
   punch.endAt = roundToQuarter(new Date()).toISOString();
   activeStaffId = "";
   $("#staffCodeInput").value = "";
+  $("#staffCodeError").classList.add("hidden");
+  saveState();
   render();
 }
 
