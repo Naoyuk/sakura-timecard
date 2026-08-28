@@ -1018,6 +1018,9 @@ function clockIn(shiftId = null) {
     startAt: startAt.toISOString(),
     endAt: null,
   });
+  activeStaffId = "";
+  $("#staffCodeInput").value = "";
+  $("#staffCodeError").classList.add("hidden");
   render();
 }
 
