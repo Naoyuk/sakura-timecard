@@ -1,0 +1,815 @@
+import { useEffect, useMemo, useState } from "react";
+import { APP_VERSION, DEFAULT_ADMIN_PASSCODE, DEFAULT_STORE_NAME } from "./lib/constants.js";
+import { exportFullBackup, exportPdf, exportSheet } from "./lib/export.js";
+import {
+  actualShiftTimes,
+  applyClockIn,
+  applyClockOut,
+  compactShiftStyle,
+  deleteStaffRecord,
+  displayShiftLabel,
+  displayShiftTimes,
+  generateStaffCode,
+  normalizeState,
+  openPunchFor,
+  payrollRows,
+  punchRows,
+  recentPunches,
+  restoreBackupPayload,
+  shiftCoverageLabel,
+  shiftPunch,
+  shiftStatusLabel,
+  signinChoicesForStaff,
+  staffName,
+  timelineBounds,
+  timelineStyle,
+  todaysShifts,
+  updateAdminPasscode,
+  updatePunchRecord,
+  updateShiftNote,
+  updateStoreSettings,
+  upsertShift,
+  upsertStaff,
+} from "./lib/model.js";
+import { loadState, saveState } from "./lib/storage.js";
+import {
+  addDays,
+  dateKey,
+  dateTimeLabel,
+  formatter,
+  minutesToTime,
+  mondayOf,
+  staffFormatter,
+  timeLabel,
+  timeToMinutes,
+  weekDates,
+  weekDayLabel,
+} from "./lib/time.js";
+
+const emptyShiftForm = (startDate) => ({
+  id: "",
+  date: startDate,
+  staffId: "",
+  start: "09:00",
+  end: "17:00",
+});
+
+const emptyPunchForm = {
+  id: "",
+  staffName: "",
+  startDate: "",
+  startTime: "",
+  endDate: "",
+  endTime: "",
+};
+
+const emptyStaffForm = () => ({
+  id: "",
+  name: "",
+  wage: "17.40",
+  code: "",
+});
+
+export default function App() {
+  const [state, setState] = useState(() => loadState());
+  const [view, setView] = useState("staff");
+  const [adminUnlocked, setAdminUnlocked] = useState(false);
+  const [activeStaffId, setActiveStaffId] = useState("");
+  const [staffCodeInput, setStaffCodeInput] = useState("");
+  const [staffCodeError, setStaffCodeError] = useState(false);
+  const [now, setNow] = useState(() => new Date());
+  const [passcodeInput, setPasscodeInput] = useState("");
+  const [passcodeError, setPasscodeError] = useState(false);
+  const [payStart, setPayStart] = useState(() => dateKey(new Date()));
+  const [payEnd, setPayEnd] = useState(() => dateKey(new Date()));
+  const [payStaff, setPayStaff] = useState("all");
+  const [shiftWeekStart, setShiftWeekStart] = useState(() => mondayOf(dateKey(new Date())));
+  const [payrollResult, setPayrollResult] = useState([]);
+  const [showPasscodeDialog, setShowPasscodeDialog] = useState(false);
+  const [showShiftDialog, setShowShiftDialog] = useState(false);
+  const [showStaffDialog, setShowStaffDialog] = useState(false);
+  const [showStaffCodeDialog, setShowStaffCodeDialog] = useState(false);
+  const [showPunchDialog, setShowPunchDialog] = useState(false);
+  const [showSaveDialog, setShowSaveDialog] = useState(false);
+  const [selectedStaffCode, setSelectedStaffCode] = useState({ name: "", code: "" });
+  const [shiftForm, setShiftForm] = useState(() => emptyShiftForm(mondayOf(dateKey(new Date()))));
+  const [staffForm, setStaffForm] = useState(() => ({
+    ...emptyStaffForm(),
+    code: generateStaffCode(new Set()),
+  }));
+  const [punchForm, setPunchForm] = useState(emptyPunchForm);
+
+  useEffect(() => {
+    saveState(state);
+  }, [state]);
+
+  useEffect(() => {
+    document.title = `Timecard | ${state.storeName || DEFAULT_STORE_NAME}`;
+    const appleTitle = document.querySelector("meta[name='apple-mobile-web-app-title']");
+    if (appleTitle) appleTitle.setAttribute("content", state.storeName || DEFAULT_STORE_NAME);
+  }, [state.storeName]);
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(new Date()), 1000);
+    return () => window.clearInterval(timer);
+  }, []);
+
+  const today = dateKey(now);
+  const weeklyDates = useMemo(() => weekDates(shiftWeekStart), [shiftWeekStart]);
+  const activeStaff = state.staff.find((person) => person.id === activeStaffId);
+  const activePunch = activeStaff ? openPunchFor(state, activeStaff.id) : null;
+  const todayShifts = useMemo(() => todaysShifts(state, now), [state, now]);
+  const signinChoices = useMemo(
+    () => (activeStaff ? signinChoicesForStaff(state, activeStaff.id, now) : { own: [], swaps: [] }),
+    [state, activeStaff, now],
+  );
+  const recentPunchRows = useMemo(() => recentPunches(state), [state]);
+
+  function resetStaffSelection() {
+    setActiveStaffId("");
+    setStaffCodeInput("");
+    setStaffCodeError(false);
+  }
+
+  function switchToView(nextView) {
+    if (nextView === "manager" && !adminUnlocked) {
+      setShowPasscodeDialog(true);
+      setPasscodeError(false);
+      setPasscodeInput("");
+      return;
+    }
+    if (nextView !== "manager") setAdminUnlocked(false);
+    if (nextView !== "staff") resetStaffSelection();
+    setView(nextView);
+  }
+
+  function openShiftDialog(shift = null) {
+    setShiftForm(shift ? {
+      id: shift.id,
+      date: shift.date,
+      staffId: shift.staffId,
+      start: minutesToTime(shift.start),
+      end: minutesToTime(shift.end),
+    } : emptyShiftForm(weeklyDates[0]));
+    setShowShiftDialog(true);
+  }
+
+  function openStaffDialog(person = null) {
+    setStaffForm(person ? {
+      id: person.id,
+      name: person.name,
+      wage: Number(person.wage).toFixed(2),
+      code: person.code,
+    } : {
+      ...emptyStaffForm(),
+      code: generateStaffCode(new Set(state.staff.map((item) => item.code).filter(Boolean))),
+    });
+    setShowStaffDialog(true);
+  }
+
+  function openPunchDialog(punch) {
+    const start = new Date(punch.startAt);
+    const end = punch.endAt ? new Date(punch.endAt) : null;
+    setPunchForm({
+      id: punch.id,
+      staffName: staffName(state, punch.staffId),
+      startDate: dateKey(start),
+      startTime: timeLabel(start),
+      endDate: end ? dateKey(end) : "",
+      endTime: end ? timeLabel(end) : "",
+    });
+    setShowPunchDialog(true);
+  }
+
+  function handleStaffCodeSubmit(event) {
+    event.preventDefault();
+    const code = staffCodeInput.trim();
+    setStaffCodeInput("");
+    const person = state.staff.find((item) => item.code === code);
+    if (!person) {
+      setActiveStaffId("");
+      setStaffCodeError(true);
+      return;
+    }
+    setActiveStaffId(person.id);
+    setStaffCodeError(false);
+  }
+
+  function handleClockIn(shiftId) {
+    setState((current) => normalizeState(applyClockIn(current, activeStaffId, shiftId, now)));
+    resetStaffSelection();
+  }
+
+  function handleClockOut() {
+    setState((current) => normalizeState(applyClockOut(current, activeStaffId, now)));
+    resetStaffSelection();
+  }
+
+  function handleDeleteStaff(staffId) {
+    const result = deleteStaffRecord(state, staffId);
+    if (result.error) {
+      window.alert(result.error);
+      return;
+    }
+    setState(normalizeState(result.state));
+  }
+
+  function handleSaveStaff(event) {
+    event.preventDefault();
+    if (!/^\d{5}$/.test(staffForm.code.trim())) {
+      window.alert("スタッフコードは5桁の数字にしてください。");
+      return;
+    }
+    const result = upsertStaff(state, {
+      id: staffForm.id,
+      name: staffForm.name.trim(),
+      wage: Number(staffForm.wage),
+      code: staffForm.code.trim(),
+    });
+    if (result.error) {
+      window.alert(result.error);
+      return;
+    }
+    setState(normalizeState(result.state));
+    setShowStaffDialog(false);
+  }
+
+  function handleSaveShift(event) {
+    event.preventDefault();
+    const start = timeToMinutes(shiftForm.start);
+    const end = timeToMinutes(shiftForm.end);
+    if (end <= start) {
+      window.alert("終了時刻は開始時刻より後にしてください。");
+      return;
+    }
+    setState((current) => normalizeState(upsertShift(current, {
+      id: shiftForm.id,
+      date: shiftForm.date,
+      staffId: shiftForm.staffId,
+      start,
+      end,
+    })));
+    setShowShiftDialog(false);
+  }
+
+  function handleSavePunch(event) {
+    event.preventDefault();
+    const result = updatePunchRecord(
+      state,
+      punchForm.id,
+      punchForm.startDate,
+      punchForm.startTime,
+      punchForm.endDate,
+      punchForm.endTime,
+    );
+    if (result.error) {
+      window.alert(result.error);
+      return;
+    }
+    setState(normalizeState(result.state));
+    setShowPunchDialog(false);
+  }
+
+  function handleUnlockAdmin(event) {
+    event.preventDefault();
+    if (passcodeInput === state.adminPasscode) {
+      setAdminUnlocked(true);
+      setShowPasscodeDialog(false);
+      setView("manager");
+      setPasscodeError(false);
+      return;
+    }
+    setPasscodeError(true);
+  }
+
+  function handleBackupRestore(event) {
+    const [file] = event.target.files || [];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.addEventListener("load", () => {
+      try {
+        const payload = JSON.parse(reader.result);
+        if (!window.confirm("現在のデータをバックアップの内容で置き換えます。よろしいですか？")) return;
+        setState(restoreBackupPayload(payload));
+        resetStaffSelection();
+        window.alert("バックアップを復元しました。");
+      } catch {
+        window.alert("バックアップファイルを読み込めませんでした。");
+      } finally {
+        event.target.value = "";
+      }
+    });
+    reader.readAsText(file);
+  }
+
+  const managerVisible = view === "manager";
+
+  return (
+    <>
+      <div className="app-shell">
+        <header className="topbar">
+          <div>
+            <h1 id="storeNameHeading">{state.storeName || DEFAULT_STORE_NAME}</h1>
+            <p id="todayLabel">{view === "staff" ? staffFormatter.format(now) : formatter.format(now)}</p>
+          </div>
+          <nav className="tabs" aria-label="画面切り替え">
+            <button className={`tab ${view === "staff" ? "active" : ""}`} onClick={() => switchToView("staff")} type="button">Staff</button>
+            <button className={`tab ${view === "manager" ? "active" : ""}`} onClick={() => switchToView("manager")} type="button">Manager</button>
+          </nav>
+        </header>
+
+        <main>
+          <section className={`view ${view === "staff" ? "active" : ""}`} id="staffView">
+            <div className="panel tablet-panel">
+              <div className="panel-heading">
+                <h2>Sign In</h2>
+                <div className="clock">{timeLabel(now)}</div>
+              </div>
+
+              <form className="code-form" onSubmit={handleStaffCodeSubmit}>
+                <label className="field">
+                  <span>Staff Code</span>
+                  <input
+                    autoComplete="off"
+                    inputMode="numeric"
+                    maxLength="5"
+                    pattern="[0-9]{5}"
+                    required
+                    value={staffCodeInput}
+                    onChange={(event) => setStaffCodeInput(event.target.value)}
+                  />
+                </label>
+                <button type="submit">Continue</button>
+              </form>
+              <p className={`error ${staffCodeError ? "" : "hidden"}`}>Staff code not found.</p>
+
+              {activePunch ? (
+                <div className="status-box">
+                  <span>{staffName(state, activePunch.staffId)} is signed in</span>
+                  <span>Since {timeLabel(new Date(activePunch.startAt))}</span>
+                </div>
+              ) : null}
+
+              <div className="shift-grid">
+                {!activeStaff ? <div className="empty">Enter your staff code.</div> : null}
+                {activeStaff && !activePunch ? (
+                  <>
+                    {signinChoices.own.map((shift) => (
+                      <SigninCard key={shift.id} shift={shift} onClockIn={handleClockIn} />
+                    ))}
+                    {signinChoices.swaps.map((shift) => (
+                      <SigninCard key={shift.id} shift={shift} isSwap onClockIn={handleClockIn} assigned={staffName(state, shift.staffId)} />
+                    ))}
+                    {!signinChoices.own.length && !signinChoices.swaps.length ? (
+                      <article className="shift-card">
+                        <strong>No available shift</strong>
+                        <div className="meta">You can sign in only for a scheduled shift or as coverage.</div>
+                      </article>
+                    ) : null}
+                  </>
+                ) : null}
+              </div>
+
+              <div className="actions">
+                {activePunch ? <button className="danger" id="clockOutBtn" onClick={handleClockOut} type="button">Sign Out</button> : null}
+              </div>
+            </div>
+
+            <div className="panel">
+              <h2>Today&apos;s Shifts</h2>
+              <ShiftTimeline now={now} locale="en" shifts={todayShifts} state={state} />
+            </div>
+          </section>
+
+          <section className={`view ${managerVisible ? "active" : ""}`} id="adminView">
+            <div className="admin-grid">
+              <div className="panel">
+                <h2>シフト作成</h2>
+                <div className="week-switcher">
+                  <button aria-label="前の週" className="ghost" id="prevWeekBtn" onClick={() => setShiftWeekStart((current) => addDays(current, -7))} type="button">‹</button>
+                  <div>
+                    <span>週</span>
+                    <strong id="shiftWeekLabel">{weekDayLabel(weeklyDates[0], "ja")} - {weekDayLabel(weeklyDates[6], "ja")}</strong>
+                  </div>
+                  <button aria-label="次の週" className="ghost" id="nextWeekBtn" onClick={() => setShiftWeekStart((current) => addDays(current, 7))} type="button">›</button>
+                </div>
+                <div className="panel-actions">
+                  <button id="openShiftModalBtn" onClick={() => openShiftDialog()} type="button">シフト追加</button>
+                </div>
+                <WeeklyShiftTable dates={weeklyDates} onEditShift={openShiftDialog} onNoteChange={(date, value) => setState((current) => normalizeState(updateShiftNote(current, date, value)))} state={state} />
+              </div>
+            </div>
+
+            <div className="panel">
+              <div className="panel-heading">
+                <h2>給与計算・保存</h2>
+                <form className="payroll-controls" onSubmit={(event) => {
+                  event.preventDefault();
+                  setPayrollResult(payrollRows(state, payStart, payEnd, payStaff));
+                }}>
+                  <input required type="date" value={payStart} onChange={(event) => setPayStart(event.target.value)} />
+                  <span>から</span>
+                  <input required type="date" value={payEnd} onChange={(event) => setPayEnd(event.target.value)} />
+                  <select aria-label="対象スタッフ" value={payStaff} onChange={(event) => setPayStaff(event.target.value)}>
+                    <option value="all">全員まとめて</option>
+                    {state.staff.map((person) => <option key={person.id} value={person.id}>{person.name}</option>)}
+                  </select>
+                  <button type="submit">計算</button>
+                  <button className="secondary" id="savePayrollBtn" onClick={() => setShowSaveDialog(true)} type="button">保存</button>
+                </form>
+              </div>
+              <div className="payroll" id="payrollResult">
+                {payrollResult.map((row) => (
+                  <div className="pay-row" key={row.person.id}>
+                    <div>
+                      <div className="title">{row.person.name}</div>
+                      <div className="sub">{row.hours.toFixed(2)} 時間 x ${Number(row.person.wage).toFixed(2)}</div>
+                    </div>
+                    <div className="amount">${row.pay.toFixed(2)}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="panel">
+              <h2>打刻修正</h2>
+              <div className="list" id="punchList">
+                {!recentPunchRows.length ? <div className="empty">打刻データはまだありません。</div> : recentPunchRows.map((punch) => (
+                  <div className="list-row" key={punch.id}>
+                    <div>
+                      <div className="title">{staffName(state, punch.staffId)}</div>
+                      <div className="sub">{dateTimeLabel(new Date(punch.startAt))} - {punch.endAt ? dateTimeLabel(new Date(punch.endAt)) : "勤務中"}</div>
+                    </div>
+                    <button className="ghost" onClick={() => openPunchDialog(punch)} type="button">修正</button>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="panel">
+              <h2>スタッフ管理</h2>
+              <div className="panel-actions">
+                <button id="openStaffModalBtn" onClick={() => openStaffDialog()} type="button">スタッフ追加</button>
+              </div>
+              <div className="list" id="staffList">
+                {!state.staff.length ? <div className="empty">スタッフはまだ登録されていません。</div> : state.staff.map((person) => (
+                  <div className="list-row" key={person.id}>
+                    <div>
+                      <div className="title">{person.name}</div>
+                      <div className="sub">
+                        コード
+                        <button className="code-chip" onClick={() => {
+                          setSelectedStaffCode({ name: person.name, code: person.code });
+                          setShowStaffCodeDialog(true);
+                        }} type="button">
+                          {person.code}
+                        </button>
+                        / ${Number(person.wage).toFixed(2)} / hour
+                      </div>
+                    </div>
+                    <div className="row-actions">
+                      <button className="ghost" onClick={() => openStaffDialog(person)} type="button">編集</button>
+                      <button className="danger" onClick={() => handleDeleteStaff(person.id)} type="button">削除</button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="panel">
+              <h2>完全バックアップ</h2>
+              <div className="backup-actions">
+                <button className="secondary" onClick={() => exportFullBackup(state)} type="button">バックアップ保存</button>
+                <label className="ghost backup-upload">
+                  バックアップ復元
+                  <input className="hidden" onChange={handleBackupRestore} type="file" accept="application/json,.json" />
+                </label>
+              </div>
+              <p className="note">スタッフ、シフト、打刻、備考、パスコードをまとめて保存・復元します。</p>
+            </div>
+
+            <div className="panel">
+              <h2>管理パスコード</h2>
+              <form className="passcode-form" onSubmit={(event) => {
+                event.preventDefault();
+                const form = new FormData(event.currentTarget);
+                const value = String(form.get("passcode") || "").trim();
+                if (!value) return;
+                setState((current) => normalizeState(updateAdminPasscode(current, value)));
+                event.currentTarget.reset();
+                window.alert("管理者パスコードを変更しました。");
+              }}>
+                <label className="field">
+                  <span>新しいパスコード</span>
+                  <input name="passcode" required type="password" inputMode="numeric" autoComplete="new-password" />
+                </label>
+                <button type="submit">変更</button>
+              </form>
+            </div>
+
+            <div className="panel">
+              <h2>店舗設定</h2>
+              <form className="passcode-form" onSubmit={(event) => {
+                event.preventDefault();
+                const form = new FormData(event.currentTarget);
+                const value = String(form.get("storeName") || "").trim();
+                if (!value) return;
+                setState((current) => normalizeState(updateStoreSettings(current, value)));
+                window.alert("店舗名を保存しました。");
+              }}>
+                <label className="field">
+                  <span>店舗名</span>
+                  <input defaultValue={state.storeName} name="storeName" required autoComplete="organization" />
+                </label>
+                <button type="submit">保存</button>
+              </form>
+            </div>
+          </section>
+        </main>
+        <footer className="app-footer">
+          <span id="appVersion">Version {APP_VERSION}</span>
+        </footer>
+      </div>
+
+      {showPasscodeDialog ? (
+        <Dialog onClose={() => setShowPasscodeDialog(false)} title="管理者パスコード">
+          <form className="dialog-panel" onSubmit={handleUnlockAdmin}>
+            <h2>管理者パスコード</h2>
+            <label className="field">
+              <span>パスコード</span>
+              <input autoFocus required type="password" value={passcodeInput} onChange={(event) => setPasscodeInput(event.target.value)} />
+            </label>
+            <p className={`error ${passcodeError ? "" : "hidden"}`}>パスコードが違います。</p>
+            <div className="dialog-actions">
+              <button className="ghost" onClick={() => setShowPasscodeDialog(false)} type="button">キャンセル</button>
+              <button type="submit">開く</button>
+            </div>
+          </form>
+        </Dialog>
+      ) : null}
+
+      {showShiftDialog ? (
+        <Dialog onClose={() => setShowShiftDialog(false)} title="シフト追加">
+          <form className="dialog-panel" onSubmit={handleSaveShift}>
+            <h2>{shiftForm.id ? "シフト変更" : "シフト追加"}</h2>
+            <label className="field">
+              <span>曜日</span>
+              <select value={shiftForm.date} onChange={(event) => setShiftForm((current) => ({ ...current, date: event.target.value }))}>
+                {weeklyDates.map((date) => <option key={date} value={date}>{weekDayLabel(date, "ja")}</option>)}
+              </select>
+            </label>
+            <label className="field">
+              <span>スタッフ</span>
+              <select value={shiftForm.staffId} onChange={(event) => setShiftForm((current) => ({ ...current, staffId: event.target.value }))}>
+                <option value="">選択してください</option>
+                {state.staff.map((person) => <option key={person.id} value={person.id}>{person.name}</option>)}
+              </select>
+            </label>
+            <label className="field">
+              <span>開始</span>
+              <TimeSelect value={shiftForm.start} onChange={(value) => setShiftForm((current) => ({ ...current, start: value }))} />
+            </label>
+            <label className="field">
+              <span>終了</span>
+              <TimeSelect value={shiftForm.end} onChange={(value) => setShiftForm((current) => ({ ...current, end: value }))} />
+            </label>
+            <div className="dialog-actions">
+              <button className="ghost" onClick={() => setShowShiftDialog(false)} type="button">キャンセル</button>
+              <button type="submit">{shiftForm.id ? "保存" : "追加"}</button>
+            </div>
+          </form>
+        </Dialog>
+      ) : null}
+
+      {showStaffDialog ? (
+        <Dialog onClose={() => setShowStaffDialog(false)} title="スタッフ追加">
+          <form className="dialog-panel" onSubmit={handleSaveStaff}>
+            <h2>{staffForm.id ? "スタッフ変更" : "スタッフ追加"}</h2>
+            <label className="field">
+              <span>名前</span>
+              <input required value={staffForm.name} onChange={(event) => setStaffForm((current) => ({ ...current, name: event.target.value }))} />
+            </label>
+            <label className="field">
+              <span>時給</span>
+              <input min="0" required step="0.01" type="number" value={staffForm.wage} onChange={(event) => setStaffForm((current) => ({ ...current, wage: event.target.value }))} />
+            </label>
+            <label className="field">
+              <span>スタッフコード</span>
+              <input inputMode="numeric" maxLength="5" pattern="[0-9]{5}" required value={staffForm.code} onChange={(event) => setStaffForm((current) => ({ ...current, code: event.target.value }))} />
+            </label>
+            <div className="dialog-actions">
+              <button className="ghost" onClick={() => setShowStaffDialog(false)} type="button">キャンセル</button>
+              <button type="submit">{staffForm.id ? "保存" : "追加"}</button>
+            </div>
+          </form>
+        </Dialog>
+      ) : null}
+
+      {showStaffCodeDialog ? (
+        <Dialog onClose={() => setShowStaffCodeDialog(false)} title="スタッフコード">
+          <div className="dialog-panel code-dialog-panel">
+            <h2>スタッフコード</h2>
+            <div className="large-code-name">{selectedStaffCode.name}</div>
+            <div className="large-code">{selectedStaffCode.code}</div>
+            <div className="dialog-actions">
+              <button onClick={() => setShowStaffCodeDialog(false)} type="button">Close</button>
+            </div>
+          </div>
+        </Dialog>
+      ) : null}
+
+      {showPunchDialog ? (
+        <Dialog onClose={() => setShowPunchDialog(false)} title="打刻修正">
+          <form className="dialog-panel" onSubmit={handleSavePunch}>
+            <h2>打刻修正</h2>
+            <label className="field">
+              <span>スタッフ</span>
+              <input disabled value={punchForm.staffName} />
+            </label>
+            <label className="field">
+              <span>開始</span>
+              <div className="date-time-fields">
+                <input required type="date" value={punchForm.startDate} onChange={(event) => setPunchForm((current) => ({ ...current, startDate: event.target.value }))} />
+                <TimeSelect value={punchForm.startTime} onChange={(value) => setPunchForm((current) => ({ ...current, startTime: value }))} />
+              </div>
+            </label>
+            <label className="field">
+              <span>終了</span>
+              <div className="date-time-fields">
+                <input type="date" value={punchForm.endDate} onChange={(event) => setPunchForm((current) => ({ ...current, endDate: event.target.value }))} />
+                <TimeSelect allowEmpty value={punchForm.endTime} onChange={(value) => setPunchForm((current) => ({ ...current, endTime: value }))} />
+              </div>
+            </label>
+            <div className="dialog-actions">
+              <button className="ghost" onClick={() => setShowPunchDialog(false)} type="button">キャンセル</button>
+              <button type="submit">Save</button>
+            </div>
+          </form>
+        </Dialog>
+      ) : null}
+
+      {showSaveDialog ? (
+        <Dialog onClose={() => setShowSaveDialog(false)} title="保存形式">
+          <div className="dialog-panel">
+            <h2>保存形式</h2>
+            <div className="dialog-actions">
+              <button className="ghost" onClick={() => setShowSaveDialog(false)} type="button">キャンセル</button>
+              <button className="secondary" onClick={() => {
+                exportSheet(state, payStart, payEnd, payStaff);
+                setShowSaveDialog(false);
+              }} type="button">スプレッドシート</button>
+              <button onClick={() => {
+                exportPdf(state, payStart, payEnd, payStaff);
+                setShowSaveDialog(false);
+              }} type="button">PDF</button>
+            </div>
+          </div>
+        </Dialog>
+      ) : null}
+    </>
+  );
+}
+
+function WeeklyShiftTable({ dates, onEditShift, onNoteChange, state }) {
+  return (
+    <div className="week-table">
+      <div className="week-table-head">
+        <div>日付</div>
+        <div>名前・シフト</div>
+        <div>備考</div>
+      </div>
+      {dates.map((date) => {
+        const shifts = state.shifts
+          .filter((shift) => shift.date === date)
+          .sort((a, b) => a.start - b.start);
+        return (
+          <div className="week-table-row" key={date}>
+            <div className="week-date">{weekDayLabel(date, "ja")}</div>
+            <div className="week-shifts">
+              <div className="compact-scale"><span>8</span><span>14</span><span>20</span></div>
+              {shifts.length ? shifts.map((shift) => {
+                const punch = shiftPunch(state, shift);
+                const actual = punch ? actualShiftTimes(punch) : null;
+                return (
+                  <div className="compact-shift" key={shift.id}>
+                    <div className="compact-name">{staffName(state, shift.staffId)}</div>
+                    <div className="compact-track stacked">
+                      <div className="compact-bar planned" style={compactShiftStyle(shift)} />
+                      {actual ? <div className="compact-bar actual" style={compactShiftStyle(actual)} /> : null}
+                    </div>
+                    <div className="compact-time">
+                      <span>予定 {displayShiftLabel(shift)}</span>
+                      {actual ? <span>実績 {minutesToTime(actual.start)}-{minutesToTime(actual.end)}</span> : null}
+                    </div>
+                    <button className="compact-edit ghost" onClick={() => onEditShift(shift)} type="button">変更</button>
+                  </div>
+                );
+              }) : <div className="compact-empty">-</div>}
+            </div>
+            <input className="week-note" data-date={date} onChange={(event) => onNoteChange(date, event.target.value)} placeholder="祝日・イベント" value={state.shiftNotes[date] || ""} />
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function ShiftTimeline({ locale, now, shifts, state }) {
+  if (!shifts.length) {
+    return <div className="empty">{locale === "en" ? "No shifts." : "シフトはまだありません。"}</div>;
+  }
+
+  const grouped = Object.entries(shifts.reduce((result, shift) => {
+    result[shift.date] ||= [];
+    result[shift.date].push(shift);
+    return result;
+  }, {}));
+
+  return grouped.map(([date, dateShifts]) => {
+    const bounds = timelineBounds(state, dateShifts, locale === "en", now);
+    return (
+      <section className="timeline-day" key={date}>
+        <div className="timeline-date">{locale === "en" ? weekDayLabel(date, "en") : date}</div>
+        <div className="timeline-scale">
+          <span>{minutesToTime(bounds.start)}</span>
+          <span>{minutesToTime(Math.floor((bounds.start + bounds.end) / 2))}</span>
+          <span>{minutesToTime(bounds.end)}</span>
+        </div>
+        {dateShifts.sort((a, b) => a.start - b.start).map((shift) => {
+          const punch = shiftPunch(state, shift);
+          if (locale === "en") {
+            const actual = punch ? actualShiftTimes(punch, now) : null;
+            return (
+              <div className="timeline-row" key={shift.id}>
+                <div className="timeline-person">
+                  <div className="title">{staffName(state, shift.staffId)}</div>
+                  <div className="sub">{shiftCoverageLabel(state, shift, punch, "en")}</div>
+                </div>
+                <div className="timeline-track stacked">
+                  <div className="timeline-block planned" style={timelineStyle(shift, bounds)}>
+                    <strong>Scheduled {displayShiftLabel(shift)}</strong>
+                  </div>
+                  {actual ? (
+                    <div className="timeline-block actual" style={timelineStyle(actual, bounds)}>
+                      <strong>Actual {minutesToTime(actual.start)} - {minutesToTime(actual.end)}</strong>
+                      <span>{shiftStatusLabel(punch, "en")}</span>
+                    </div>
+                  ) : null}
+                </div>
+              </div>
+            );
+          }
+
+          const display = displayShiftTimes(punch, shift);
+          return (
+            <div className="timeline-row" key={shift.id}>
+              <div className="timeline-person">
+                <div className="title">{staffName(state, shift.staffId)}</div>
+                <div className="sub">{shiftCoverageLabel(state, shift, punch, "ja")}</div>
+              </div>
+              <div className="timeline-track">
+                <div className={`timeline-block ${punch ? "worked" : ""}`} style={timelineStyle({ start: display.start, end: display.end || display.start + 15 }, bounds)}>
+                  <strong>{minutesToTime(display.start)} - {display.end ? minutesToTime(display.end) : "..."}</strong>
+                  <span>{shiftStatusLabel(punch, "ja")}</span>
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </section>
+    );
+  });
+}
+
+function SigninCard({ assigned, isSwap = false, onClockIn, shift }) {
+  const title = isSwap ? `Cover ${assigned}'s shift` : "Your scheduled shift";
+  const note = isSwap ? "This will be recorded as coverage." : "Sign in for your scheduled shift.";
+  return (
+    <article className={`shift-card ${isSwap ? "swap" : ""}`}>
+      <strong>{title}</strong>
+      <div className="meta">{displayShiftLabel(shift)}</div>
+      <div className="meta">{note}</div>
+      <button data-shift-id={shift.id} onClick={() => onClockIn(shift.id)} type="button">Sign In</button>
+    </article>
+  );
+}
+
+function TimeSelect({ allowEmpty = false, onChange, value }) {
+  const options = [];
+  if (allowEmpty) options.push(<option key="empty" value="">未入力</option>);
+  for (let minutes = 0; minutes < 24 * 60; minutes += 15) {
+    const label = minutesToTime(minutes);
+    options.push(<option key={label} value={label}>{label}</option>);
+  }
+  return <select className="time-select" value={value} onChange={(event) => onChange(event.target.value)}>{options}</select>;
+}
+
+function Dialog({ children, onClose }) {
+  return (
+    <div className="dialog" role="dialog" aria-modal="true" onClick={onClose}>
+      <div onClick={(event) => event.stopPropagation()}>
+        {children}
+      </div>
+    </div>
+  );
+}
