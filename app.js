@@ -1,4 +1,5 @@
 const storeKey = "grocery-timecard-v1";
+const APP_VERSION = "1.0.1";
 const TIME_ZONE = "America/Vancouver";
 const formatter = new Intl.DateTimeFormat("ja-JP", {
   year: "numeric",
@@ -238,6 +239,8 @@ function renderStoreName() {
   const storeName = state.storeName || "Sakura Mart";
   $("#storeNameHeading").textContent = storeName;
   document.title = `Timecard | ${storeName}`;
+  const versionLabel = $("#appVersion");
+  if (versionLabel) versionLabel.textContent = `Version ${APP_VERSION}`;
   const appleTitle = document.querySelector("meta[name='apple-mobile-web-app-title']");
   if (appleTitle) appleTitle.setAttribute("content", storeName);
   if ($("#storeNameInput")) $("#storeNameInput").value = storeName;
