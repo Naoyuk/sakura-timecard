@@ -111,6 +111,30 @@ export function todaysShifts(state, now = new Date()) {
     .sort((a, b) => a.start - b.start);
 }
 
+export function todaysTimelineShifts(state, now = new Date()) {
+  const today = dateKey(now);
+  const scheduled = todaysShifts(state, now);
+  const unscheduled = state.punches
+    .filter((punch) => {
+      if (punch.shiftId || !punch.startAt) return false;
+      const started = new Date(punch.startAt);
+      if (Number.isNaN(started.getTime()) || dateKey(started) !== today) return false;
+      return !scheduled.some((shift) => shift.staffId === punch.staffId);
+    })
+    .map((punch) => {
+      const actual = actualShiftTimes(punch, now);
+      return {
+        id: `unscheduled-${punch.id}`,
+        date: today,
+        staffId: punch.staffId,
+        start: actual.start,
+        end: actual.end,
+      };
+    });
+
+  return [...scheduled, ...unscheduled].sort((a, b) => a.start - b.start);
+}
+
 export function signinChoicesForStaff(state, staffId, now = new Date()) {
   const today = todaysShifts(state, now);
   return {

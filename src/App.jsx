@@ -25,7 +25,7 @@ import {
   staffName,
   timelineBounds,
   timelineStyle,
-  todaysShifts,
+  todaysTimelineShifts,
   updateAdminPasscode,
   updatePunchRecord,
   updateShiftNote,
@@ -123,7 +123,7 @@ export default function App() {
   const weeklyDates = useMemo(() => weekDates(shiftWeekStart), [shiftWeekStart]);
   const activeStaff = state.staff.find((person) => person.id === activeStaffId);
   const activePunch = activeStaff ? openPunchFor(state, activeStaff.id) : null;
-  const todayShifts = useMemo(() => todaysShifts(state, now), [state, now]);
+  const todayShifts = useMemo(() => todaysTimelineShifts(state, now), [state, now]);
   const signinChoices = useMemo(
     () => (activeStaff ? signinChoicesForStaff(state, activeStaff.id, now) : { own: [], swaps: [] }),
     [state, activeStaff, now],

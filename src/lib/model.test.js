@@ -9,6 +9,7 @@ import {
   recentPunches,
   shiftPunch,
   signinChoicesForStaff,
+  todaysTimelineShifts,
   updatePunchRecord,
 } from "./model.js";
 
@@ -35,6 +36,26 @@ describe("model helpers", () => {
     expect(choices.own).toHaveLength(1);
     expect(choices.own[0].id).toBe("shift-a");
     expect(choices.swaps).toHaveLength(1);
+  });
+
+  it("includes emergency help in today's timeline", () => {
+    const state = buildState();
+    state.punches.push({
+      id: "emergency-c",
+      staffId: "staff-c",
+      shiftId: "",
+      scheduledStaffId: "staff-c",
+      startAt: "2026-08-27T19:00:00.000Z",
+      endAt: null,
+    });
+    const timeline = todaysTimelineShifts(state, new Date("2026-08-27T19:05:00.000Z"));
+    expect(timeline.map((item) => item.staffId)).toEqual(["staff-a", "staff-b", "staff-c"]);
+    expect(timeline[2]).toMatchObject({
+      staffId: "staff-c",
+      date: "2026-08-27",
+      start: 12 * 60,
+      end: 12 * 60 + 15,
+    });
   });
 
   it("records sign in and sign out timestamps", () => {

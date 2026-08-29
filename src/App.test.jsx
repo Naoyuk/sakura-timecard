@@ -147,4 +147,57 @@ describe("App", () => {
     expect(punchList?.textContent).toContain("2026-08-28 12:00");
     expect(punchList?.textContent).toContain("勤務中");
   });
+
+  it("shows emergency help staff in Today's Shifts after manager-approved sign in", () => {
+    localStorage.setItem("grocery-timecard-v1", JSON.stringify({
+      staff: [
+        { id: "staff-a", name: "Aさん", wage: 20, code: "12345" },
+        { id: "staff-b", name: "Bさん", wage: 21, code: "23456" },
+        { id: "staff-c", name: "Cさん", wage: 22, code: "34567" },
+      ],
+      shifts: [
+        { id: "shift-a", date: "2026-08-28", staffId: "staff-a", start: 600, end: 900 },
+        { id: "shift-b", date: "2026-08-28", staffId: "staff-b", start: 660, end: 1140 },
+      ],
+      punches: [
+        {
+          id: "punch-a",
+          staffId: "staff-a",
+          shiftId: "shift-a",
+          scheduledStaffId: "staff-a",
+          startAt: "2026-08-28T17:00:00.000Z",
+          endAt: null,
+        },
+        {
+          id: "punch-b",
+          staffId: "staff-b",
+          shiftId: "shift-b",
+          scheduledStaffId: "staff-b",
+          startAt: "2026-08-28T18:00:00.000Z",
+          endAt: null,
+        },
+        {
+          id: "punch-c",
+          staffId: "staff-c",
+          shiftId: "",
+          scheduledStaffId: "staff-c",
+          startAt: "2026-08-28T19:00:00.000Z",
+          endAt: null,
+        },
+      ],
+      storeName: "Sakura Mart",
+      shiftNotes: {},
+      adminPasscode: "1968",
+      today: "2026-08-28",
+    }));
+    vi.setSystemTime(new Date("2026-08-28T19:05:00.000Z"));
+
+    render(<App />);
+
+    expect(screen.getByText("Today's Shifts")).toBeInTheDocument();
+    expect(screen.getAllByText("Cさん").length).toBeGreaterThan(0);
+    expect(screen.getByText("Cさん checked in")).toBeInTheDocument();
+    expect(screen.getByText("Scheduled 12:00 - 12:15")).toBeInTheDocument();
+    expect(screen.getByText("Actual 12:00 - 12:15")).toBeInTheDocument();
+  });
 });
