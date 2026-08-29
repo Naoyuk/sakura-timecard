@@ -84,4 +84,67 @@ describe("App", () => {
     expect(punchList?.textContent).toContain("2026-08-27 10:00");
     expect(punchList?.textContent).toContain("2026-08-27 16:00");
   });
+
+  it("allows manager-approved help sign in for a staff member without a shift", () => {
+    localStorage.setItem("grocery-timecard-v1", JSON.stringify({
+      staff: [
+        { id: "staff-a", name: "Aさん", wage: 20, code: "12345" },
+        { id: "staff-b", name: "Bさん", wage: 21, code: "23456" },
+        { id: "staff-c", name: "Cさん", wage: 22, code: "34567" },
+      ],
+      shifts: [
+        { id: "shift-a", date: "2026-08-28", staffId: "staff-a", start: 600, end: 900 },
+        { id: "shift-b", date: "2026-08-28", staffId: "staff-b", start: 660, end: 1140 },
+      ],
+      punches: [
+        {
+          id: "punch-a",
+          staffId: "staff-a",
+          shiftId: "shift-a",
+          scheduledStaffId: "staff-a",
+          startAt: "2026-08-28T17:00:00.000Z",
+          endAt: null,
+        },
+        {
+          id: "punch-b",
+          staffId: "staff-b",
+          shiftId: "shift-b",
+          scheduledStaffId: "staff-b",
+          startAt: "2026-08-28T18:00:00.000Z",
+          endAt: null,
+        },
+      ],
+      storeName: "Sakura Mart",
+      shiftNotes: {},
+      adminPasscode: "1968",
+      today: "2026-08-28",
+    }));
+    vi.setSystemTime(new Date("2026-08-28T19:05:00.000Z"));
+
+    render(<App />);
+
+    fireEvent.change(screen.getByLabelText("Staff Code"), { target: { value: "34567" } });
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+
+    expect(screen.getByRole("button", { name: "Manager-approved help sign in" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Manager-approved help sign in" }));
+
+    const passcodeDialog = screen.getByRole("dialog");
+    expect(passcodeDialog.textContent).toContain("Cさんを予定外ヘルプ勤務でサインインさせます。");
+    fireEvent.change(within(passcodeDialog).getByLabelText("パスコード"), { target: { value: "1968" } });
+    fireEvent.click(within(passcodeDialog).getByRole("button", { name: "許可してサインイン" }));
+
+    expect(screen.getByText("Enter your staff code.")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Sign Out" })).toBeNull();
+
+    fireEvent.click(screen.getAllByRole("button", { name: "Manager" })[0]);
+    const managerPasscodeDialog = screen.getByRole("dialog");
+    fireEvent.change(within(managerPasscodeDialog).getByLabelText("パスコード"), { target: { value: "1968" } });
+    fireEvent.click(within(managerPasscodeDialog).getByRole("button", { name: "開く" }));
+
+    const punchList = document.getElementById("punchList");
+    expect(punchList?.textContent).toContain("Cさん");
+    expect(punchList?.textContent).toContain("2026-08-28 12:00");
+    expect(punchList?.textContent).toContain("勤務中");
+  });
 });

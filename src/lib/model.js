@@ -213,6 +213,27 @@ export function applyClockIn(state, staffId, shiftId, now = new Date()) {
   };
 }
 
+export function applyEmergencyClockIn(state, staffId, now = new Date()) {
+  if (!staffId || openPunchFor(state, staffId)) return state;
+  const person = state.staff.find((item) => item.id === staffId);
+  if (!person) return state;
+  const startAt = roundToQuarter(now);
+  return {
+    ...state,
+    punches: [
+      ...state.punches,
+      {
+        id: newId(),
+        staffId,
+        shiftId: "",
+        scheduledStaffId: staffId,
+        startAt: startAt.toISOString(),
+        endAt: null,
+      },
+    ],
+  };
+}
+
 export function applyClockOut(state, staffId, now = new Date()) {
   const active = openPunchFor(state, staffId);
   if (!active) return state;

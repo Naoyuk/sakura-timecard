@@ -5,6 +5,7 @@ import {
   actualShiftTimes,
   applyClockIn,
   applyClockOut,
+  applyEmergencyClockIn,
   compactShiftStyle,
   createPunchRecord,
   deleteStaffRecord,
@@ -83,6 +84,7 @@ export default function App() {
   const [now, setNow] = useState(() => new Date());
   const [passcodeInput, setPasscodeInput] = useState("");
   const [passcodeError, setPasscodeError] = useState(false);
+  const [passcodeMode, setPasscodeMode] = useState("manager");
   const [payStart, setPayStart] = useState(() => dateKey(new Date()));
   const [payEnd, setPayEnd] = useState(() => dateKey(new Date()));
   const [payStaff, setPayStaff] = useState("all");
@@ -136,6 +138,7 @@ export default function App() {
 
   function switchToView(nextView) {
     if (nextView === "manager" && !adminUnlocked) {
+      setPasscodeMode("manager");
       setShowPasscodeDialog(true);
       setPasscodeError(false);
       setPasscodeInput("");
@@ -227,6 +230,13 @@ export default function App() {
     resetStaffSelection();
   }
 
+  function requestEmergencyClockIn() {
+    setPasscodeMode("emergency");
+    setPasscodeError(false);
+    setPasscodeInput("");
+    setShowPasscodeDialog(true);
+  }
+
   function handleDeleteStaff(staffId) {
     const result = deleteStaffRecord(state, staffId);
     if (result.error) {
@@ -311,10 +321,16 @@ export default function App() {
   function handleUnlockAdmin(event) {
     event.preventDefault();
     if (passcodeInput === state.adminPasscode) {
-      setAdminUnlocked(true);
       setShowPasscodeDialog(false);
-      setView("manager");
       setPasscodeError(false);
+      setPasscodeInput("");
+      if (passcodeMode === "emergency") {
+        setState((current) => normalizeState(applyEmergencyClockIn(current, activeStaffId, now)));
+        resetStaffSelection();
+        return;
+      }
+      setAdminUnlocked(true);
+      setView("manager");
       return;
     }
     setPasscodeError(true);
@@ -403,6 +419,8 @@ export default function App() {
                       <article className="shift-card">
                         <strong>No available shift</strong>
                         <div className="meta">You can sign in only for a scheduled shift or as coverage.</div>
+                        <div className="meta">If a manager approved emergency help, use the manager code below.</div>
+                        <button onClick={requestEmergencyClockIn} type="button">Manager-approved help sign in</button>
                       </article>
                     ) : null}
                   </>
@@ -576,7 +594,10 @@ export default function App() {
       {showPasscodeDialog ? (
         <Dialog onClose={() => setShowPasscodeDialog(false)} title="管理者パスコード">
           <form className="dialog-panel" onSubmit={handleUnlockAdmin}>
-            <h2>管理者パスコード</h2>
+            <h2>{passcodeMode === "emergency" ? "ヘルプ勤務の許可" : "管理者パスコード"}</h2>
+            {passcodeMode === "emergency" && activeStaff ? (
+              <p className="note">{staffName(state, activeStaff.id)}を予定外ヘルプ勤務でサインインさせます。</p>
+            ) : null}
             <label className="field">
               <span>パスコード</span>
               <input
@@ -591,10 +612,12 @@ export default function App() {
                 onChange={(event) => setPasscodeInput(event.target.value)}
               />
             </label>
-            <p className={`error ${passcodeError ? "" : "hidden"}`}>パスコードが違います。</p>
+            <p className={`error ${passcodeError ? "" : "hidden"}`}>
+              {passcodeMode === "emergency" ? "管理者コードが違います。" : "パスコードが違います。"}
+            </p>
             <div className="dialog-actions">
               <button className="ghost" onClick={() => setShowPasscodeDialog(false)} type="button">キャンセル</button>
-              <button type="submit">開く</button>
+              <button type="submit">{passcodeMode === "emergency" ? "許可してサインイン" : "開く"}</button>
             </div>
           </form>
         </Dialog>

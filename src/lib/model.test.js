@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   applyClockIn,
   applyClockOut,
+  applyEmergencyClockIn,
   createPunchRecord,
   createDefaultState,
   payrollRows,
@@ -17,6 +18,7 @@ function buildState() {
     staff: [
       { id: "staff-a", name: "Aさん", wage: 20, code: "12345" },
       { id: "staff-b", name: "Bさん", wage: 21, code: "23456" },
+      { id: "staff-c", name: "Cさん", wage: 22, code: "34567" },
     ],
     shifts: [
       { id: "shift-a", date: "2026-08-27", staffId: "staff-a", start: 10 * 60, end: 16 * 60 },
@@ -42,6 +44,18 @@ describe("model helpers", () => {
 
     const signedOut = applyClockOut(signedIn, "staff-a", new Date("2026-08-27T21:03:00.000Z"));
     expect(signedOut.punches[0].endAt).toBe("2026-08-27T21:00:00.000Z");
+  });
+
+  it("allows manager-approved emergency help sign in without a scheduled shift", () => {
+    const emergency = applyEmergencyClockIn(buildState(), "staff-c", new Date("2026-08-27T19:02:00.000Z"));
+    expect(emergency.punches).toHaveLength(1);
+    expect(emergency.punches[0]).toMatchObject({
+      staffId: "staff-c",
+      shiftId: "",
+      scheduledStaffId: "staff-c",
+      startAt: "2026-08-27T19:00:00.000Z",
+      endAt: null,
+    });
   });
 
   it("matches older punches back to the scheduled shift", () => {
