@@ -65,6 +65,7 @@ const emptyPunchForm = {
   startTime: "",
   endDate: "",
   endTime: "",
+  payrollFromActualStart: false,
 };
 
 const emptyStaffForm = () => ({
@@ -185,6 +186,7 @@ export default function App() {
       startTime: timeLabel(start),
       endDate: end ? dateKey(end) : "",
       endTime: end ? timeLabel(end) : "",
+      payrollFromActualStart: Boolean(punch.payrollFromActualStart),
     });
     setShowPunchDialog(true);
   }
@@ -199,6 +201,7 @@ export default function App() {
       startTime: "09:00",
       endDate: today,
       endTime: "17:00",
+      payrollFromActualStart: false,
     });
     setShowPunchDialog(true);
   }
@@ -292,6 +295,7 @@ export default function App() {
     const startTime = String(form.get("startTime") || punchForm.startTime);
     const endDate = String(form.get("endDate") || punchForm.endDate);
     const endTime = String(form.get("endTime") || punchForm.endTime);
+    const payrollFromActualStart = form.get("payrollFromActualStart") === "on";
 
     const result = punchForm.mode === "create"
       ? createPunchRecord(
@@ -301,6 +305,7 @@ export default function App() {
         startTime,
         endDate,
         endTime,
+        payrollFromActualStart,
       )
       : updatePunchRecord(
         state,
@@ -309,6 +314,7 @@ export default function App() {
         startTime,
         endDate,
         endTime,
+        payrollFromActualStart,
       );
     if (result.error) {
       window.alert(result.error);
@@ -724,6 +730,7 @@ export default function App() {
                 />
                 <TimeSelect
                   name="startTime"
+                  stepMinutes={1}
                   value={punchForm.startTime}
                   onChange={(value) => setPunchForm((current) => ({ ...current, startTime: value }))}
                 />
@@ -741,10 +748,20 @@ export default function App() {
                 <TimeSelect
                   allowEmpty
                   name="endTime"
+                  stepMinutes={1}
                   value={punchForm.endTime}
                   onChange={(value) => setPunchForm((current) => ({ ...current, endTime: value }))}
                 />
               </div>
+            </label>
+            <label className="checkbox-field">
+              <input
+                name="payrollFromActualStart"
+                type="checkbox"
+                checked={punchForm.payrollFromActualStart}
+                onChange={(event) => setPunchForm((current) => ({ ...current, payrollFromActualStart: event.target.checked }))}
+              />
+              <span>早出として実打刻の開始時刻から給与計算</span>
             </label>
             <div className="dialog-actions">
               <button className="ghost" onClick={() => setShowPunchDialog(false)} type="button">キャンセル</button>
@@ -900,10 +917,10 @@ function SigninCard({ assigned, isSwap = false, onClockIn, shift }) {
   );
 }
 
-function TimeSelect({ allowEmpty = false, name, onChange, value }) {
+function TimeSelect({ allowEmpty = false, name, onChange, stepMinutes = 15, value }) {
   const options = [];
   if (allowEmpty) options.push(<option key="empty" value="">未入力</option>);
-  for (let minutes = 0; minutes < 24 * 60; minutes += 15) {
+  for (let minutes = 0; minutes < 24 * 60; minutes += stepMinutes) {
     const label = minutesToTime(minutes);
     options.push(<option key={label} value={label}>{label}</option>);
   }
